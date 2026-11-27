@@ -3,60 +3,43 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Tacx trainer test</title>
+<title>Tacx route rider</title>
 <style>
-  :root {
-    --bg: #14181c; --panel: #1d2329; --line: #2e3740;
-    --text: #e8ecef; --dim: #8b98a3; --accent: #f2b134; --bad: #ef6b5f; --good: #5fcf8e;
-  }
+  :root { --bg:#14181c; --panel:#1d2329; --line:#2e3740; --text:#e8ecef; --dim:#8b98a3; --accent:#f2b134; --bad:#ef6b5f; --good:#5fcf8e; }
   * { box-sizing: border-box; }
-  body {
-    margin: 0; padding: 20px; background: var(--bg); color: var(--text);
-    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-    max-width: 900px; margin-inline: auto;
-  }
-  h1 { font-size: 1.3rem; margin: 0 0 4px; }
-  .sub { color: var(--dim); margin: 0 0 18px; }
-  .bar { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 18px; }
-  button {
-    font: inherit; color: var(--text); background: var(--panel); border: 1px solid var(--line);
-    border-radius: 8px; padding: 12px 18px; cursor: pointer; min-height: 48px;
-  }
-  button:hover { border-color: var(--accent); }
-  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-  button.primary { background: var(--accent); color: #1a1405; border-color: var(--accent); font-weight: 600; }
-  button:disabled { opacity: .45; cursor: not-allowed; }
-  #status { color: var(--dim); }
-  #status.ok { color: var(--good); }
-  #status.err { color: var(--bad); }
-  .readouts { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; margin-bottom: 18px; }
-  .tile { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
-  .tile.main { border-color: var(--accent); }
-  .tile .label { color: var(--dim); font-size: .9rem; }
-  .tile .value { font-size: 3rem; font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; }
-  .tile.main .value { color: var(--accent); }
-  .tile .unit { color: var(--dim); font-size: 1rem; font-weight: 400; margin-left: 4px; }
-  section { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; margin-bottom: 18px; }
-  section h2 { font-size: 1rem; margin: 0 0 12px; }
-  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
-  input[type=range] { flex: 1 1 240px; min-height: 36px; accent-color: var(--accent); }
-  input[type=number] {
-    font: inherit; width: 110px; padding: 11px; border-radius: 8px;
-    border: 1px solid var(--line); background: var(--bg); color: var(--text);
-  }
-  #gradeShown { font-size: 1.6rem; font-weight: 700; min-width: 90px; font-variant-numeric: tabular-nums; }
-  #log {
-    background: #0d1013; border: 1px solid var(--line); border-radius: 8px; padding: 10px;
-    height: 200px; overflow: auto; font: .8rem/1.5 ui-monospace, Menlo, Consolas, monospace; color: var(--dim);
-    white-space: pre-wrap; word-break: break-all;
-  }
-  .note { color: var(--dim); font-size: .9rem; margin: 8px 0 0; }
+  body { margin:0 auto; padding:20px; background:var(--bg); color:var(--text); font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; max-width:960px; }
+  h1 { font-size:1.3rem; margin:0 0 4px; }
+  h2 { font-size:1rem; margin:0 0 12px; }
+  .sub { color:var(--dim); margin:0 0 16px; }
+  .bar { display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin-bottom:16px; }
+  button, .filebtn { font:inherit; color:var(--text); background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:12px 18px; cursor:pointer; min-height:48px; display:inline-flex; align-items:center; }
+  button:hover, .filebtn:hover { border-color:var(--accent); }
+  button:focus-visible, .filebtn:focus-within { outline:2px solid var(--accent); outline-offset:2px; }
+  button.primary { background:var(--accent); color:#1a1405; border-color:var(--accent); font-weight:600; }
+  button:disabled { opacity:.45; cursor:not-allowed; }
+  #status { color:var(--dim); } #status.ok { color:var(--good); } #status.err { color:var(--bad); }
+  .tiles { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; margin-bottom:16px; }
+  .tile { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:12px 14px; }
+  .tile.main { border-color:var(--accent); }
+  .label { color:var(--dim); font-size:.85rem; }
+  .value { font-size:2.2rem; font-weight:700; line-height:1.15; font-variant-numeric:tabular-nums; }
+  .tile.main .value { color:var(--accent); }
+  .unit { color:var(--dim); font-size:.9rem; font-weight:400; margin-left:4px; }
+  section { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:16px; margin-bottom:16px; }
+  .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+  #routeName { font-weight:600; margin-right:auto; }
+  canvas { width:100%; height:210px; display:block; margin-top:12px; }
+  input[type=range] { flex:1 1 240px; min-height:36px; accent-color:var(--accent); }
+  input[type=number] { font:inherit; width:110px; padding:11px; border-radius:8px; border:1px solid var(--line); background:var(--bg); color:var(--text); }
+  details summary { cursor:pointer; font-weight:600; min-height:32px; }
+  #log { background:#0d1013; border:1px solid var(--line); border-radius:8px; padding:10px; height:170px; overflow:auto; font:.8rem/1.5 ui-monospace,Menlo,Consolas,monospace; color:var(--dim); white-space:pre-wrap; word-break:break-all; }
+  .note { color:var(--dim); font-size:.9rem; margin:8px 0 0; }
 </style>
 </head>
 <body>
 
-<h1>Tacx trainer test</h1>
-<p class="sub">Connect over Bluetooth, read power and cadence, and set the road gradient.</p>
+<h1>Tacx route rider</h1>
+<p class="sub">Ride a route and let the trainer follow its hills.</p>
 
 <div class="bar">
   <button id="connectBtn" class="primary">Connect to trainer</button>
@@ -64,35 +47,45 @@
   <span id="status">Not connected</span>
 </div>
 
-<div class="readouts">
+<div class="tiles">
   <div class="tile main"><div class="label">Power</div><div class="value"><span id="power">--</span><span class="unit">W</span></div></div>
   <div class="tile"><div class="label">Cadence</div><div class="value"><span id="cadence">--</span><span class="unit">rpm</span></div></div>
   <div class="tile"><div class="label">Speed</div><div class="value"><span id="speed">--</span><span class="unit">km/h</span></div></div>
+  <div class="tile"><div class="label">Gradient</div><div class="value"><span id="gradeNow">0.0</span><span class="unit">%</span></div></div>
 </div>
 
 <section>
-  <h2>Road gradient (simulation mode)</h2>
   <div class="row">
-    <span id="gradeShown">0.0%</span>
-    <input id="grade" type="range" min="-10" max="20" step="0.5" value="0" aria-label="Gradient">
-    <button id="sendGrade" disabled>Send gradient</button>
+    <span id="routeName">No route</span>
+    <button id="startBtn" class="primary" disabled>Start ride</button>
+    <button id="resetBtn">Back to start</button>
+    <button id="demoBtn">Demo route</button>
+    <label class="filebtn">Load GPX file<input id="gpxFile" type="file" accept=".gpx,application/gpx+xml,text/xml" hidden></label>
   </div>
-  <div class="row" style="margin-top:10px">
-    <button class="preset" data-g="0" disabled>0%</button>
-    <button class="preset" data-g="3" disabled>3%</button>
-    <button class="preset" data-g="6" disabled>6%</button>
-    <button class="preset" data-g="10" disabled>10%</button>
+  <canvas id="chart"></canvas>
+  <div class="tiles" style="margin:12px 0 0">
+    <div class="tile"><div class="label">Ridden</div><div class="value"><span id="dRidden">0.00</span><span class="unit">km</span></div></div>
+    <div class="tile"><div class="label">Remaining</div><div class="value"><span id="dLeft">0.00</span><span class="unit">km</span></div></div>
+    <div class="tile"><div class="label">Climbed</div><div class="value"><span id="climbed">0</span><span class="unit">m</span></div></div>
+    <div class="tile"><div class="label">Route climb</div><div class="value"><span id="climbTotal">0</span><span class="unit">m</span></div></div>
   </div>
-  <p class="note">Pedal while testing. Your Flux should get noticeably harder as the gradient rises.</p>
+  <p class="note">Press Start ride, then pedal. Your position moves at the speed the trainer reports, and the resistance follows the road ahead.</p>
 </section>
 
 <section>
-  <h2>Target power (ERG mode)</h2>
-  <div class="row">
-    <input id="target" type="number" min="0" max="1000" step="5" value="100" aria-label="Target power in watts">
-    <span>W</span>
-    <button id="sendTarget" disabled>Set target power</button>
-  </div>
+  <details>
+    <summary>Manual controls</summary>
+    <div class="row" style="margin-top:12px">
+      <span id="gradeShown" style="font-size:1.4rem;font-weight:700;min-width:80px">0.0%</span>
+      <input id="grade" type="range" min="-10" max="20" step="0.5" value="0" aria-label="Gradient">
+      <button id="sendGrade" disabled>Send gradient</button>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <input id="target" type="number" min="0" max="1000" step="5" value="100" aria-label="Target power in watts"><span>W</span>
+      <button id="sendTarget" disabled>Set target power</button>
+    </div>
+    <p class="note">Sending a manual value while a ride is running is overridden within a second.</p>
+  </details>
 </section>
 
 <section>
@@ -101,151 +94,215 @@
 </section>
 
 <script>
-// Tacx FE-C over Bluetooth
-const TACX_SERVICE = '6e40fec1-b5a3-f393-e0a9-e50e24dcca9e';
-const TACX_NOTIFY  = '6e40fec2-b5a3-f393-e0a9-e50e24dcca9e'; // data from trainer
-const TACX_WRITE   = '6e40fec3-b5a3-f393-e0a9-e50e24dcca9e'; // commands to trainer
+// ---------- Tacx FE-C over Bluetooth ----------
+const TACX_SERVICE='6e40fec1-b5a3-f393-e0a9-e50e24dcca9e';
+const TACX_NOTIFY ='6e40fec2-b5a3-f393-e0a9-e50e24dcca9e';
+const TACX_WRITE  ='6e40fec3-b5a3-f393-e0a9-e50e24dcca9e';
+let device=null, writeChar=null, notifyChar=null, speedMs=0;
+const $=id=>document.getElementById(id);
+const hex=b=>Array.from(b,x=>x.toString(16).padStart(2,'0')).join(' ');
 
-let device = null, writeChar = null, notifyChar = null;
-const $ = id => document.getElementById(id);
+function log(msg){ const el=$('log'); el.textContent+=`${new Date().toLocaleTimeString()}  ${msg}\n`; el.scrollTop=el.scrollHeight; }
+function setStatus(t,c){ const s=$('status'); s.textContent=t; s.className=c||''; }
 
-function log(msg) {
-  const el = $('log');
-  const t = new Date().toLocaleTimeString();
-  el.textContent += `${t}  ${msg}\n`;
-  el.scrollTop = el.scrollHeight;
+function antMessage(page){
+  const m=[0xA4,0x09,0x4F,0x05,...page]; let c=0; for(const b of m) c^=b; m.push(c); return new Uint8Array(m);
 }
-function setStatus(text, cls) {
-  const s = $('status'); s.textContent = text; s.className = cls || '';
+async function send(page,label,quiet){
+  if(!writeChar) return;
+  const d=antMessage(page);
+  try{
+    if(writeChar.writeValueWithoutResponse) await writeChar.writeValueWithoutResponse(d); else await writeChar.writeValue(d);
+    if(!quiet) log(`Sent ${label}: ${hex(d)}`);
+  }catch(e){ log(`Send failed (${label}): ${e.message}`); }
 }
-function setControls(connected) {
-  $('connectBtn').disabled = connected;
-  $('disconnectBtn').disabled = !connected;
-  $('sendGrade').disabled = !connected;
-  $('sendTarget').disabled = !connected;
-  document.querySelectorAll('.preset').forEach(b => b.disabled = !connected);
+function sendGrade(g,quiet){
+  const raw=Math.round((g+200)/0.01);
+  return send([0x33,0xFF,0xFF,0xFF,0xFF,raw&0xFF,(raw>>8)&0xFF,0x28],`gradient ${g.toFixed(1)}%`,quiet);
 }
-const hex = bytes => Array.from(bytes, b => b.toString(16).padStart(2, '0')).join(' ');
-
-// Wrap an 8-byte FE-C data page in an ANT message: sync, length, id, channel, data, checksum
-function antMessage(page) {
-  const msg = [0xA4, 0x09, 0x4F, 0x05, ...page];
-  let chk = 0;
-  for (const b of msg) chk ^= b;
-  msg.push(chk);
-  return new Uint8Array(msg);
+function sendTargetPower(w){
+  const raw=Math.round(w*4);
+  return send([0x31,0xFF,0xFF,0xFF,0xFF,0xFF,raw&0xFF,(raw>>8)&0xFF],`target power ${w} W`);
 }
-
-async function send(page, label) {
-  if (!writeChar) return;
-  const data = antMessage(page);
-  try {
-    if (writeChar.writeValueWithoutResponse) await writeChar.writeValueWithoutResponse(data);
-    else await writeChar.writeValue(data);
-    log(`Sent ${label}: ${hex(data)}`);
-  } catch (e) {
-    log(`Send failed (${label}): ${e.message}`);
+function onData(ev){
+  const v=new Uint8Array(ev.target.value.buffer); let i=0;
+  while(i+4<v.length){
+    if(v[i]!==0xA4){ i++; continue; }
+    const end=i+v[i+1]+4; if(end>v.length) break;
+    handlePage(v.slice(i+4,i+12)); i=end;
   }
 }
-
-// Page 0x33, track resistance: grade in 0.01% units with a +200% offset, then rolling resistance
-function sendGrade(gradePercent) {
-  const raw = Math.round((gradePercent + 200) / 0.01);
-  const crr = 0x28; // about 0.004, a typical road tyre
-  return send([0x33, 0xFF, 0xFF, 0xFF, 0xFF, raw & 0xFF, (raw >> 8) & 0xFF, crr],
-              `gradient ${gradePercent.toFixed(1)}%`);
-}
-
-// Page 0x31, target power in 0.25 W units
-function sendTargetPower(watts) {
-  const raw = Math.round(watts * 4);
-  return send([0x31, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, raw & 0xFF, (raw >> 8) & 0xFF],
-              `target power ${watts} W`);
-}
-
-// Incoming notifications can hold one or more ANT messages
-function onData(event) {
-  const v = new Uint8Array(event.target.value.buffer);
-  let i = 0;
-  while (i + 4 < v.length) {
-    if (v[i] !== 0xA4) { i++; continue; }
-    const len = v[i + 1];
-    const end = i + len + 4;
-    if (end > v.length) break;
-    const page = v.slice(i + 4, i + 12); // skip sync, length, id, channel
-    handlePage(page);
-    i = end;
+function handlePage(p){
+  if(p[0]===0x19){
+    $('cadence').textContent=p[2]===0xFF?'--':p[2];
+    $('power').textContent=p[5]|((p[6]&0x0F)<<8);
+  }else if(p[0]===0x10){
+    const s=p[4]|(p[5]<<8);
+    if(s!==0xFFFF){ speedMs=s*0.001; $('speed').textContent=(s*0.0036).toFixed(1); }
   }
 }
-
-let unknownSeen = new Set();
-function handlePage(p) {
-  if (p[0] === 0x19) {
-    // Specific trainer data: cadence and instantaneous power
-    const cadence = p[2];
-    const power = p[5] | ((p[6] & 0x0F) << 8);
-    $('cadence').textContent = cadence === 0xFF ? '--' : cadence;
-    $('power').textContent = power;
-  } else if (p[0] === 0x10) {
-    // General FE data: speed in 0.001 m/s
-    const speed = p[4] | (p[5] << 8);
-    $('speed').textContent = speed === 0xFFFF ? '--' : (speed * 0.0036).toFixed(1);
-  } else if (!unknownSeen.has(p[0])) {
-    unknownSeen.add(p[0]);
-    log(`Other data page 0x${p[0].toString(16)}: ${hex(p)}`);
-  }
+function setControls(on){
+  $('connectBtn').disabled=on; $('disconnectBtn').disabled=!on;
+  $('sendGrade').disabled=!on; $('sendTarget').disabled=!on;
+  $('startBtn').disabled=!on||!route;
 }
-
-async function connect() {
-  if (!navigator.bluetooth) {
-    setStatus('Web Bluetooth is not available. Use Chrome on Android, over https.', 'err');
-    return;
-  }
-  try {
+async function connect(){
+  if(!navigator.bluetooth){ setStatus('Web Bluetooth is not available. Use Chrome on Android, over https.','err'); return; }
+  try{
     setStatus('Choose your trainer in the pop-up...');
-    device = await navigator.bluetooth.requestDevice({
-      filters: [{ services: [TACX_SERVICE] }],
-      optionalServices: ['cycling_power', 'cycling_speed_and_cadence']
-    });
-    device.addEventListener('gattserverdisconnected', onDisconnected);
-    log(`Selected ${device.name}`);
+    device=await navigator.bluetooth.requestDevice({filters:[{services:[TACX_SERVICE]}],optionalServices:['cycling_power','cycling_speed_and_cadence']});
+    device.addEventListener('gattserverdisconnected',onDisconnected);
     setStatus('Connecting...');
-    const server = await device.gatt.connect();
-    const service = await server.getPrimaryService(TACX_SERVICE);
-    writeChar = await service.getCharacteristic(TACX_WRITE);
-    notifyChar = await service.getCharacteristic(TACX_NOTIFY);
-    notifyChar.addEventListener('characteristicvaluechanged', onData);
+    const server=await device.gatt.connect();
+    const svc=await server.getPrimaryService(TACX_SERVICE);
+    writeChar=await svc.getCharacteristic(TACX_WRITE);
+    notifyChar=await svc.getCharacteristic(TACX_NOTIFY);
+    notifyChar.addEventListener('characteristicvaluechanged',onData);
     await notifyChar.startNotifications();
-    setStatus(`Connected to ${device.name}`, 'ok');
-    setControls(true);
-    log('Listening for data. Start pedalling.');
-  } catch (e) {
-    setStatus(`Could not connect: ${e.message}`, 'err');
-    log(`Error: ${e.message}`);
+    setStatus(`Connected to ${device.name}`,'ok'); setControls(true); log('Connected. Start pedalling.');
+  }catch(e){ setStatus(`Could not connect: ${e.message}`,'err'); log(`Error: ${e.message}`); }
+}
+function onDisconnected(){
+  setStatus('Disconnected','err'); writeChar=notifyChar=null; speedMs=0; stopRide(); setControls(false);
+  ['power','cadence','speed'].forEach(id=>$(id).textContent='--'); log('Disconnected');
+}
+
+// ---------- Routes ----------
+const STEP=10; // metres between samples
+let route=null, pos=0, riding=false, sentGrade=0, lastSent=null, lastT=0;
+
+function smooth(a,r){
+  return a.map((_,i)=>{ let s=0,n=0; for(let k=i-r;k<=i+r;k++){ if(k>=0&&k<a.length){ s+=a[k]; n++; } } return s/n; });
+}
+// pts: [{d: metres from start, e: elevation in metres}]
+function buildRoute(name,pts){
+  const total=pts[pts.length-1].d, n=Math.floor(total/STEP)+1, raw=[]; let j=0;
+  for(let i=0;i<n;i++){
+    const d=i*STEP; while(j<pts.length-2&&pts[j+1].d<d) j++;
+    const a=pts[j], b=pts[j+1], t=b.d>a.d?Math.min(1,Math.max(0,(d-a.d)/(b.d-a.d))):0;
+    raw.push(a.e+(b.e-a.e)*t);
   }
+  const ele=smooth(smooth(raw,4),4), grade=[], climb=[0];
+  for(let i=0;i<n;i++){
+    const a=Math.max(0,i-3), b=Math.min(n-1,i+3);
+    grade.push(b>a?Math.max(-10,Math.min(20,(ele[b]-ele[a])/((b-a)*STEP)*100)):0);
+    if(i>0) climb.push(climb[i-1]+Math.max(0,ele[i]-ele[i-1]));
+  }
+  route={name,ele,grade,climb,total,min:Math.min(...ele),max:Math.max(...ele)};
+  pos=0; stopRide(); lastSent=null;
+  $('routeName').textContent=`${name} (${(total/1000).toFixed(1)} km)`;
+  $('climbTotal').textContent=Math.round(climb[n-1]);
+  $('startBtn').disabled=!writeChar; update();
+}
+function demoRoute(){
+  const k=[[0,100],[1,100],[3,200],[4,200],[5,160],[7,160],[8,240],[9,240],[12,150],[13,150],[14,175],[15,150],[16,150]];
+  buildRoute('Demo route',k.map(([km,e])=>({d:km*1000,e})));
+}
+function parseGPX(text,fallbackName){
+  const doc=new DOMParser().parseFromString(text,'application/xml');
+  if(doc.getElementsByTagName('parsererror').length) throw new Error('This is not a valid GPX file.');
+  let nodes=[...doc.getElementsByTagName('trkpt')];
+  if(nodes.length<2) nodes=[...doc.getElementsByTagName('rtept')];
+  if(nodes.length<2) throw new Error('No track points found in this file.');
+  const pts=[]; let d=0, prev=null, lastE=null, haveEle=false;
+  for(const nd of nodes){
+    const lat=parseFloat(nd.getAttribute('lat')), lon=parseFloat(nd.getAttribute('lon'));
+    const eEl=nd.getElementsByTagName('ele')[0];
+    if(eEl&&!isNaN(parseFloat(eEl.textContent))){ lastE=parseFloat(eEl.textContent); haveEle=true; }
+    if(prev){
+      const R=6371000, rad=Math.PI/180, dLat=(lat-prev[0])*rad, dLon=(lon-prev[1])*rad;
+      const h=Math.sin(dLat/2)**2+Math.cos(prev[0]*rad)*Math.cos(lat*rad)*Math.sin(dLon/2)**2;
+      const step=2*R*Math.asin(Math.sqrt(h));
+      if(step<0.5) continue;
+      d+=step;
+    }
+    prev=[lat,lon]; pts.push({d,e:lastE});
+  }
+  if(!haveEle) throw new Error('This GPX file has no elevation data, so it would be flat.');
+  const first=pts.find(p=>p.e!==null).e; pts.forEach(p=>{ if(p.e===null) p.e=first; });
+  if(pts.length<2||d<100) throw new Error('This route is too short.');
+  const nm=doc.getElementsByTagName('name')[0];
+  return {name:(nm&&nm.textContent.trim())||fallbackName,pts};
 }
 
-function onDisconnected() {
-  setStatus('Disconnected', 'err');
-  setControls(false);
-  writeChar = notifyChar = null;
-  ['power', 'cadence', 'speed'].forEach(id => $(id).textContent = '--');
-  log('Disconnected');
+// ---------- Riding ----------
+function gradeAt(p){
+  if(!route) return 0;
+  const f=Math.min(route.grade.length-1,Math.max(0,p/STEP)), i=Math.floor(f), j=Math.min(i+1,route.grade.length-1);
+  return route.grade[i]+(route.grade[j]-route.grade[i])*(f-i);
 }
+function startRide(){
+  if(!route||!writeChar) return;
+  riding=true; lastT=performance.now(); $('startBtn').textContent='Pause'; log('Ride started');
+}
+function stopRide(){ riding=false; $('startBtn').textContent='Start ride'; }
+$('startBtn').onclick=()=>riding?(stopRide(),log('Ride paused')):startRide();
+$('resetBtn').onclick=()=>{ pos=0; lastSent=null; update(); };
 
-$('connectBtn').onclick = connect;
-$('disconnectBtn').onclick = () => { if (device && device.gatt.connected) device.gatt.disconnect(); };
-$('grade').oninput = e => $('gradeShown').textContent = `${parseFloat(e.target.value).toFixed(1)}%`;
-$('sendGrade').onclick = () => sendGrade(parseFloat($('grade').value));
-$('sendTarget').onclick = () => sendTargetPower(parseInt($('target').value, 10) || 0);
-document.querySelectorAll('.preset').forEach(b => b.onclick = () => {
-  const g = parseFloat(b.dataset.g);
-  $('grade').value = g;
-  $('gradeShown').textContent = `${g.toFixed(1)}%`;
-  sendGrade(g);
-});
+setInterval(()=>{ // position, about 5 times a second
+  const now=performance.now(), dt=(now-lastT)/1000; lastT=now;
+  if(riding&&route){
+    pos+=speedMs*dt;
+    if(pos>=route.total){ pos=route.total; stopRide(); sendGrade(0); log('Route finished'); }
+    update();
+  }
+},200);
+setInterval(()=>{ // gradient to trainer, once a second, eased so it never jumps
+  if(!riding||!route||!writeChar) return;
+  const target=gradeAt(pos);
+  sentGrade+=Math.max(-1.5,Math.min(1.5,target-sentGrade));
+  if(lastSent===null||Math.abs(sentGrade-lastSent)>=0.1){ lastSent=sentGrade; sendGrade(sentGrade,true); }
+},1000);
 
-if (!navigator.bluetooth) setStatus('Web Bluetooth is not available. Use Chrome on Android, over https.', 'err');
+// ---------- Display ----------
+function gradeColor(g){ return g<=-1?'#4a86b5':g<3?'#4a9d6f':g<6?'#c9b64a':g<9?'#e08a3c':'#d8584a'; }
+function update(){
+  if(!route){ draw(); return; }
+  const i=Math.min(route.ele.length-1,Math.round(pos/STEP));
+  $('dRidden').textContent=(pos/1000).toFixed(2);
+  $('dLeft').textContent=((route.total-pos)/1000).toFixed(2);
+  $('climbed').textContent=Math.round(route.climb[i]);
+  $('gradeNow').textContent=(riding?sentGrade:gradeAt(pos)).toFixed(1);
+  draw();
+}
+function draw(){
+  const c=$('chart'), dpr=window.devicePixelRatio||1, w=c.clientWidth, h=c.clientHeight;
+  if(c.width!==Math.round(w*dpr)){ c.width=Math.round(w*dpr); c.height=Math.round(h*dpr); }
+  const g=c.getContext('2d'); g.setTransform(dpr,0,0,dpr,0,0); g.clearRect(0,0,w,h);
+  if(!route) return;
+  const L=46,R=8,T=10,B=22, pw=w-L-R, ph=h-T-B, n=route.ele.length;
+  const lo=Math.floor(route.min/10)*10-10, hi=Math.ceil(route.max/10)*10+10;
+  const yOf=e=>T+ph-(e-lo)/(hi-lo)*ph, xPos=L+pos/route.total*pw;
+  for(let x=0;x<pw;x++){
+    const i=Math.min(n-1,Math.round(x/pw*(n-1))), y=yOf(route.ele[i]);
+    g.globalAlpha=L+x<xPos?0.4:1; g.fillStyle=gradeColor(route.grade[i]); g.fillRect(L+x,y,1,T+ph-y);
+  }
+  g.globalAlpha=1; g.fillStyle='#8b98a3'; g.font='12px system-ui,sans-serif';
+  g.textAlign='right'; g.fillText(Math.round(hi)+' m',L-6,T+10); g.fillText(Math.round(lo)+' m',L-6,T+ph);
+  g.textAlign='left'; g.fillText('0 km',L,h-6); g.textAlign='right'; g.fillText((route.total/1000).toFixed(1)+' km',L+pw,h-6);
+  const yy=yOf(route.ele[Math.min(n-1,Math.round(pos/STEP))]);
+  g.strokeStyle='#e8ecef'; g.lineWidth=2; g.beginPath(); g.moveTo(xPos,T); g.lineTo(xPos,T+ph); g.stroke();
+  g.fillStyle='#e8ecef'; g.beginPath(); g.arc(xPos,yy,6,0,7); g.fill();
+}
+window.addEventListener('resize',draw);
+
+// ---------- Wiring ----------
+$('connectBtn').onclick=connect;
+$('disconnectBtn').onclick=()=>{ if(device&&device.gatt.connected) device.gatt.disconnect(); };
+$('demoBtn').onclick=demoRoute;
+$('gpxFile').onchange=async e=>{
+  const f=e.target.files[0]; if(!f) return;
+  try{
+    const r=parseGPX(await f.text(),f.name.replace(/\.gpx$/i,''));
+    buildRoute(r.name,r.pts); log(`Loaded ${r.name}`);
+  }catch(err){ setStatus(err.message,'err'); log(`GPX error: ${err.message}`); }
+  e.target.value='';
+};
+$('grade').oninput=e=>$('gradeShown').textContent=`${parseFloat(e.target.value).toFixed(1)}%`;
+$('sendGrade').onclick=()=>sendGrade(parseFloat($('grade').value));
+$('sendTarget').onclick=()=>sendTargetPower(parseInt($('target').value,10)||0);
+if(!navigator.bluetooth) setStatus('Web Bluetooth is not available. Use Chrome on Android, over https.','err');
+demoRoute();
 </script>
 </body>
 </html>

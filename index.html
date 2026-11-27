@@ -38,6 +38,7 @@
   .note { color:var(--dim); font-size:.9rem; margin:8px 0 0; }
   [hidden] { display:none !important; }
   #map { height:340px; margin-top:12px; border-radius:8px; border:1px solid var(--line); }
+  #profRow label { display:inline-flex; align-items:center; gap:8px; }
   #mapBar label { display:inline-flex; align-items:center; gap:8px; min-height:48px; }
   input[type=checkbox] { width:22px; height:22px; accent-color:var(--accent); }
   select, input[type=text] { font:inherit; padding:11px; border-radius:8px; border:1px solid var(--line); background:var(--bg); color:var(--text); min-height:48px; }
@@ -65,6 +66,12 @@
     <button id="saveUserBtn" class="primary">Add rider</button>
     <button id="cancelUserBtn">Cancel</button>
   </div>
+  <div class="row" id="profRow" style="margin-top:12px">
+    <label>Gradient scale <input id="scaleIn" type="number" min="10" max="150" step="5" value="100" disabled> %</label>
+    <label>Rider <input id="weightIn" type="number" min="30" max="200" step="0.5" value="75" disabled> kg</label>
+    <label>Bike <input id="bikeIn" type="number" min="5" max="30" step="0.1" value="10" disabled> kg</label>
+  </div>
+  <p class="note">At 100% the trainer gets the road's real gradient. At 75% every hill feels a quarter flatter. The weights set the trainer's virtual speed. Settings are saved per rider.</p>
 </section>
 
 <div class="bar">
@@ -77,7 +84,7 @@
   <div class="tile main"><div class="label">Power</div><div class="value"><span id="power">--</span><span class="unit">W</span></div></div>
   <div class="tile"><div class="label">Cadence</div><div class="value"><span id="cadence">--</span><span class="unit">rpm</span></div></div>
   <div class="tile"><div class="label">Speed</div><div class="value"><span id="speed">--</span><span class="unit">km/h</span></div></div>
-  <div class="tile"><div class="label">Gradient</div><div class="value"><span id="gradeNow">0.0</span><span class="unit">%</span></div></div>
+  <div class="tile"><div class="label" id="gradeLbl">Gradient</div><div class="value"><span id="gradeNow">0.0</span><span class="unit">%</span></div></div>
 </div>
 
 <section>
@@ -125,7 +132,7 @@
   <h2 id="histTitle">Ride history</h2>
   <div class="tablewrap">
     <table>
-      <thead><tr><th>Date</th><th>Time</th><th>km</th><th>Avg W</th><th>Max W</th><th>Cadence</th><th>Climb m</th></tr></thead>
+      <thead><tr><th>Date</th><th>Time</th><th>km</th><th>Avg W</th><th>Max W</th><th>Cadence</th><th>Climb m</th><th>Scale</th></tr></thead>
       <tbody id="rideRows"></tbody>
     </table>
   </div>
@@ -286,6 +293,7 @@ function startRide(){
   if(!route||!writeChar) return;
   if(!currentUser()){ alert('Add a rider first, so the ride can be saved.'); return; }
   if(!ride) ride={start:new Date(),sec:0,dist:0,pSum:0,pMax:0,n:0,cSum:0,cN:0,route:route.name};
+  sendUserConfig();
   $('finishBtn').disabled=false;
   riding=true; lastT=performance.now(); $('startBtn').textContent='Pause'; log('Ride started');
 }
@@ -311,7 +319,7 @@ setInterval(()=>{ // gradient to trainer, once a second, eased so it never jumps
     if(curCad>0){ ride.cSum+=curCad; ride.cN++; }
   }
   if(!riding||!route||!writeChar) return;
-  const target=gradeAt(pos);
+  const target=Math.max(-10,Math.min(20,gradeAt(pos)*prof().scale/100));
   sentGrade+=Math.max(-1.5,Math.min(1.5,target-sentGrade));
   if(lastSent===null||Math.abs(sentGrade-lastSent)>=0.1){ lastSent=sentGrade; sendGrade(sentGrade,true); }
 },1000);
@@ -326,6 +334,8 @@ function update(){
   $('climbed').textContent=Math.round(route.climb[i]);
   $('gradeNow').textContent=(riding?sentGrade:gradeAt(pos)).toFixed(1);
   mapUpdate();
+  const gs=prof().scale;
+  $('gradeLbl').textContent=gs===100?'Gradient':`Gradient (route ${gradeAt(pos).toFixed(1)}% × ${gs}%)`;
   draw();
 }
 function draw(){
@@ -363,23 +373,24 @@ function renderUsers(){
   if(db.last) sel.value=db.last;
   sel.disabled=$('delUserBtn').disabled=!db.users.length;
   if(!db.users.length) showNew(true);
+  renderProfile();
   renderRides();
 }
 function addUser(){
   const name=$('newName').value.trim(); if(!name) return;
   if(db.users.some(u=>u.name.toLowerCase()===name.toLowerCase())){ alert('A rider with that name already exists.'); return; }
-  const u={id:Date.now().toString(36),name,rides:[]};
+  const u={id:Date.now().toString(36),name,scale:100,weight:75,bike:10,rides:[]};
   db.users.push(u); db.last=u.id; saveDb(); $('newName').value=''; showNew(false); renderUsers();
 }
 const fmtDur=s=>{ const h=Math.floor(s/3600), m=Math.floor(s%3600/60), p=n=>String(n).padStart(2,'0'); return (h?h+':':'')+p(m)+':'+p(s%60); };
 function renderRides(){
   const u=currentUser(), tb=$('rideRows'); tb.innerHTML='';
   $('histTitle').textContent=u?`Ride history: ${u.name}`:'Ride history';
-  if(!u||!u.rides.length){ tb.innerHTML='<tr><td colspan="7">No rides saved yet.</td></tr>'; return; }
+  if(!u||!u.rides.length){ tb.innerHTML='<tr><td colspan="8">No rides saved yet.</td></tr>'; return; }
   for(const r of u.rides){
     const d=new Date(r.t), tr=document.createElement('tr');
     [d.toLocaleDateString(undefined,{day:'numeric',month:'short',year:'numeric'})+' '+d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}),
-     fmtDur(r.sec), r.km.toFixed(2), r.avgP, r.maxP, r.avgC, r.climb].forEach(v=>{ const td=document.createElement('td'); td.textContent=v; tr.appendChild(td); });
+     fmtDur(r.sec), r.km.toFixed(2), r.avgP, r.maxP, r.avgC, r.climb, r.scale?r.scale+'%':'-'].forEach(v=>{ const td=document.createElement('td'); td.textContent=v; tr.appendChild(td); });
     tb.appendChild(tr);
   }
 }
@@ -391,7 +402,7 @@ function finishRide(){
     const i=route?Math.min(route.ele.length-1,Math.round(pos/STEP)):0;
     const r={t:ride.start.toISOString(),sec:Math.round(ride.sec),km:+(ride.dist/1000).toFixed(2),
       avgP:ride.n?Math.round(ride.pSum/ride.n):0,maxP:ride.pMax,avgC:ride.cN?Math.round(ride.cSum/ride.cN):0,
-      climb:route?Math.round(route.climb[i]):0,route:ride.route};
+      climb:route?Math.round(route.climb[i]):0,route:ride.route,scale:prof().scale,kg:prof().weight};
     u.rides.unshift(r); saveDb(); log(`Saved ride for ${u.name}: ${r.km} km`);
   }
   ride=null; $('finishBtn').disabled=true; renderRides();
@@ -402,14 +413,14 @@ function download(name,text,type){
 }
 function exportCsv(){
   const u=currentUser(); if(!u||!u.rides.length){ alert('No rides to export.'); return; }
-  const rows=['date,time,duration_s,distance_km,avg_power_w,max_power_w,avg_cadence_rpm,climb_m,route'];
+  const rows=['date,time,duration_s,distance_km,avg_power_w,max_power_w,avg_cadence_rpm,climb_m,route,scale_pct,rider_kg'];
   for(const r of u.rides){
     const d=new Date(r.t);
-    rows.push([d.toLocaleDateString('en-CA'),d.toLocaleTimeString('en-GB'),r.sec,r.km,r.avgP,r.maxP,r.avgC,r.climb,'"'+String(r.route).replace(/"/g,'""')+'"'].join(','));
+    rows.push([d.toLocaleDateString('en-CA'),d.toLocaleTimeString('en-GB'),r.sec,r.km,r.avgP,r.maxP,r.avgC,r.climb,'"'+String(r.route).replace(/"/g,'""')+'"',r.scale??'',r.kg??''].join(','));
   }
   download(`${u.name.replace(/\W+/g,'_')}-rides.csv`,rows.join('\n'),'text/csv');
 }
-$('userSel').onchange=e=>{ db.last=e.target.value; saveDb(); renderRides(); };
+$('userSel').onchange=e=>{ db.last=e.target.value; saveDb(); renderProfile(); renderRides(); };
 $('newUserBtn').onclick=()=>showNew(true);
 $('cancelUserBtn').onclick=()=>showNew(!db.users.length);
 $('saveUserBtn').onclick=addUser;
@@ -419,6 +430,31 @@ $('delUserBtn').onclick=()=>{
   db.users=db.users.filter(x=>x.id!==u.id); db.last=null; saveDb(); renderUsers();
 };
 $('finishBtn').onclick=finishRide;
+
+// Per-rider settings: gradient scale and weights
+function prof(){
+  const u=currentUser()||{};
+  return {scale:u.scale??100, weight:u.weight??75, bike:u.bike??10};
+}
+// FE-C page 0x37, user configuration: rider weight 0.01 kg, bike weight 0.05 kg, other fields marked invalid
+function sendUserConfig(){
+  const p=prof(), w=Math.round(p.weight*100), b=Math.round(p.bike/0.05);
+  return send([0x37,w&0xFF,(w>>8)&0xFF,0xFF,0x0F|((b&0x0F)<<4),(b>>4)&0xFF,0xFF,0x00],`weights: rider ${p.weight} kg, bike ${p.bike} kg`);
+}
+function renderProfile(){
+  const u=currentUser(), p=prof();
+  ['scaleIn','weightIn','bikeIn'].forEach(id=>$(id).disabled=!u);
+  $('scaleIn').value=p.scale; $('weightIn').value=p.weight; $('bikeIn').value=p.bike;
+}
+function setProfile(key,el,min,max){
+  const u=currentUser(); if(!u) return;
+  let v=parseFloat(el.value); if(isNaN(v)) v=prof()[key];
+  v=Math.min(max,Math.max(min,v)); u[key]=v; el.value=v; saveDb();
+  if(key!=='scale'&&writeChar) sendUserConfig();
+}
+$('scaleIn').onchange=e=>setProfile('scale',e.target,10,150);
+$('weightIn').onchange=e=>setProfile('weight',e.target,30,200);
+$('bikeIn').onchange=e=>setProfile('bike',e.target,5,30);
 $('csvBtn').onclick=exportCsv;
 $('backupBtn').onclick=()=>download('tacx-backup.json',JSON.stringify(db,null,1),'application/json');
 $('restoreFile').onchange=async e=>{

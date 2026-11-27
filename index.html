@@ -4,6 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Tacx route rider</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
 <style>
   :root { --bg:#14181c; --panel:#1d2329; --line:#2e3740; --text:#e8ecef; --dim:#8b98a3; --accent:#f2b134; --bad:#ef6b5f; --good:#5fcf8e; }
   * { box-sizing: border-box; }
@@ -34,12 +36,36 @@
   details summary { cursor:pointer; font-weight:600; min-height:32px; }
   #log { background:#0d1013; border:1px solid var(--line); border-radius:8px; padding:10px; height:170px; overflow:auto; font:.8rem/1.5 ui-monospace,Menlo,Consolas,monospace; color:var(--dim); white-space:pre-wrap; word-break:break-all; }
   .note { color:var(--dim); font-size:.9rem; margin:8px 0 0; }
+  [hidden] { display:none !important; }
+  #map { height:340px; margin-top:12px; border-radius:8px; border:1px solid var(--line); }
+  #mapBar label { display:inline-flex; align-items:center; gap:8px; min-height:48px; }
+  input[type=checkbox] { width:22px; height:22px; accent-color:var(--accent); }
+  select, input[type=text] { font:inherit; padding:11px; border-radius:8px; border:1px solid var(--line); background:var(--bg); color:var(--text); min-height:48px; }
+  .tablewrap { overflow-x:auto; }
+  table { width:100%; border-collapse:collapse; font-size:.9rem; font-variant-numeric:tabular-nums; }
+  th, td { text-align:right; padding:8px 6px; border-bottom:1px solid var(--line); white-space:nowrap; }
+  th:first-child, td:first-child { text-align:left; }
+  th { color:var(--dim); font-weight:600; }
 </style>
 </head>
 <body>
 
 <h1>Tacx route rider</h1>
 <p class="sub">Ride a route and let the trainer follow its hills.</p>
+
+<section>
+  <div class="row">
+    <label for="userSel">Rider</label>
+    <select id="userSel"></select>
+    <button id="newUserBtn">New rider</button>
+    <button id="delUserBtn">Delete rider</button>
+  </div>
+  <div class="row" id="newUserRow" style="margin-top:10px" hidden>
+    <input id="newName" type="text" placeholder="Name" maxlength="40" aria-label="New rider name">
+    <button id="saveUserBtn" class="primary">Add rider</button>
+    <button id="cancelUserBtn">Cancel</button>
+  </div>
+</section>
 
 <div class="bar">
   <button id="connectBtn" class="primary">Connect to trainer</button>
@@ -59,10 +85,17 @@
     <span id="routeName">No route</span>
     <button id="startBtn" class="primary" disabled>Start ride</button>
     <button id="resetBtn">Back to start</button>
+    <button id="finishBtn" disabled>Finish &amp; save</button>
     <button id="demoBtn">Demo route</button>
     <label class="filebtn">Load GPX file<input id="gpxFile" type="file" accept=".gpx,application/gpx+xml,text/xml" hidden></label>
   </div>
   <canvas id="chart"></canvas>
+  <div id="map" role="img" aria-label="Route map" hidden></div>
+  <div id="mapBar" class="row" hidden>
+    <label><input type="checkbox" id="follow" checked> Follow rider</label>
+    <button id="wholeBtn">Whole route</button>
+  </div>
+  <p id="mapNote" class="note" hidden></p>
   <div class="tiles" style="margin:12px 0 0">
     <div class="tile"><div class="label">Ridden</div><div class="value"><span id="dRidden">0.00</span><span class="unit">km</span></div></div>
     <div class="tile"><div class="label">Remaining</div><div class="value"><span id="dLeft">0.00</span><span class="unit">km</span></div></div>
@@ -86,6 +119,22 @@
     </div>
     <p class="note">Sending a manual value while a ride is running is overridden within a second.</p>
   </details>
+</section>
+
+<section>
+  <h2 id="histTitle">Ride history</h2>
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>Date</th><th>Time</th><th>km</th><th>Avg W</th><th>Max W</th><th>Cadence</th><th>Climb m</th></tr></thead>
+      <tbody id="rideRows"></tbody>
+    </table>
+  </div>
+  <div class="row" style="margin-top:12px">
+    <button id="csvBtn">Export rides (CSV)</button>
+    <button id="backupBtn">Back up all riders</button>
+    <label class="filebtn">Restore backup<input id="restoreFile" type="file" accept=".json,application/json" hidden></label>
+  </div>
+  <p class="note">Records are stored in this browser on this device. Use Back up now and then, because clearing Chrome's site data deletes them.</p>
 </section>
 
 <section>
@@ -134,8 +183,9 @@ function onData(ev){
 }
 function handlePage(p){
   if(p[0]===0x19){
+    curCad=p[2]===0xFF?0:p[2]; curPow=p[5]|((p[6]&0x0F)<<8);
     $('cadence').textContent=p[2]===0xFF?'--':p[2];
-    $('power').textContent=p[5]|((p[6]&0x0F)<<8);
+    $('power').textContent=curPow;
   }else if(p[0]===0x10){
     const s=p[4]|(p[5]<<8);
     if(s!==0xFFFF){ speedMs=s*0.001; $('speed').textContent=(s*0.0036).toFixed(1); }
@@ -163,7 +213,7 @@ async function connect(){
   }catch(e){ setStatus(`Could not connect: ${e.message}`,'err'); log(`Error: ${e.message}`); }
 }
 function onDisconnected(){
-  setStatus('Disconnected','err'); writeChar=notifyChar=null; speedMs=0; stopRide(); setControls(false);
+  setStatus('Disconnected','err'); writeChar=notifyChar=null; speedMs=0; curPow=curCad=0; stopRide(); setControls(false);
   ['power','cadence','speed'].forEach(id=>$(id).textContent='--'); log('Disconnected');
 }
 
@@ -176,11 +226,12 @@ function smooth(a,r){
 }
 // pts: [{d: metres from start, e: elevation in metres}]
 function buildRoute(name,pts){
-  const total=pts[pts.length-1].d, n=Math.floor(total/STEP)+1, raw=[]; let j=0;
+  const total=pts[pts.length-1].d, n=Math.floor(total/STEP)+1, raw=[], ll=[]; let j=0;
   for(let i=0;i<n;i++){
     const d=i*STEP; while(j<pts.length-2&&pts[j+1].d<d) j++;
     const a=pts[j], b=pts[j+1], t=b.d>a.d?Math.min(1,Math.max(0,(d-a.d)/(b.d-a.d))):0;
     raw.push(a.e+(b.e-a.e)*t);
+    if(a.lat!==undefined) ll.push([a.lat+(b.lat-a.lat)*t, a.lon+(b.lon-a.lon)*t]);
   }
   const ele=smooth(smooth(raw,4),4), grade=[], climb=[0];
   for(let i=0;i<n;i++){
@@ -188,11 +239,11 @@ function buildRoute(name,pts){
     grade.push(b>a?Math.max(-10,Math.min(20,(ele[b]-ele[a])/((b-a)*STEP)*100)):0);
     if(i>0) climb.push(climb[i-1]+Math.max(0,ele[i]-ele[i-1]));
   }
-  route={name,ele,grade,climb,total,min:Math.min(...ele),max:Math.max(...ele)};
-  pos=0; stopRide(); lastSent=null;
+  route={name,ele,grade,climb,total,ll:ll.length?ll:null,min:Math.min(...ele),max:Math.max(...ele)};
+  pos=0; stopRide(); lastSent=null; ride=null; $('finishBtn').disabled=true;
   $('routeName').textContent=`${name} (${(total/1000).toFixed(1)} km)`;
   $('climbTotal').textContent=Math.round(climb[n-1]);
-  $('startBtn').disabled=!writeChar; update();
+  $('startBtn').disabled=!writeChar; mapSetRoute(); update();
 }
 function demoRoute(){
   const k=[[0,100],[1,100],[3,200],[4,200],[5,160],[7,160],[8,240],[9,240],[12,150],[13,150],[14,175],[15,150],[16,150]];
@@ -216,7 +267,7 @@ function parseGPX(text,fallbackName){
       if(step<0.5) continue;
       d+=step;
     }
-    prev=[lat,lon]; pts.push({d,e:lastE});
+    prev=[lat,lon]; pts.push({d,e:lastE,lat,lon});
   }
   if(!haveEle) throw new Error('This GPX file has no elevation data, so it would be flat.');
   const first=pts.find(p=>p.e!==null).e; pts.forEach(p=>{ if(p.e===null) p.e=first; });
@@ -233,21 +284,32 @@ function gradeAt(p){
 }
 function startRide(){
   if(!route||!writeChar) return;
+  if(!currentUser()){ alert('Add a rider first, so the ride can be saved.'); return; }
+  if(!ride) ride={start:new Date(),sec:0,dist:0,pSum:0,pMax:0,n:0,cSum:0,cN:0,route:route.name};
+  $('finishBtn').disabled=false;
   riding=true; lastT=performance.now(); $('startBtn').textContent='Pause'; log('Ride started');
 }
 function stopRide(){ riding=false; $('startBtn').textContent='Start ride'; }
 $('startBtn').onclick=()=>riding?(stopRide(),log('Ride paused')):startRide();
-$('resetBtn').onclick=()=>{ pos=0; lastSent=null; update(); };
+$('resetBtn').onclick=()=>{
+  if(ride&&ride.sec>0&&!confirm('Discard this unsaved ride?')) return;
+  ride=null; $('finishBtn').disabled=true; stopRide(); pos=0; lastSent=null; update();
+};
 
 setInterval(()=>{ // position, about 5 times a second
   const now=performance.now(), dt=(now-lastT)/1000; lastT=now;
   if(riding&&route){
     pos+=speedMs*dt;
-    if(pos>=route.total){ pos=route.total; stopRide(); sendGrade(0); log('Route finished'); }
+    if(ride){ ride.sec+=dt; ride.dist+=speedMs*dt; }
+    if(pos>=route.total){ pos=route.total; stopRide(); sendGrade(0); log('Route finished'); finishRide(); }
     update();
   }
 },200);
 setInterval(()=>{ // gradient to trainer, once a second, eased so it never jumps
+  if(riding&&ride){
+    ride.pSum+=curPow; ride.pMax=Math.max(ride.pMax,curPow); ride.n++;
+    if(curCad>0){ ride.cSum+=curCad; ride.cN++; }
+  }
   if(!riding||!route||!writeChar) return;
   const target=gradeAt(pos);
   sentGrade+=Math.max(-1.5,Math.min(1.5,target-sentGrade));
@@ -263,6 +325,7 @@ function update(){
   $('dLeft').textContent=((route.total-pos)/1000).toFixed(2);
   $('climbed').textContent=Math.round(route.climb[i]);
   $('gradeNow').textContent=(riding?sentGrade:gradeAt(pos)).toFixed(1);
+  mapUpdate();
   draw();
 }
 function draw(){
@@ -285,6 +348,123 @@ function draw(){
   g.fillStyle='#e8ecef'; g.beginPath(); g.arc(xPos,yy,6,0,7); g.fill();
 }
 window.addEventListener('resize',draw);
+
+// ---------- Riders and ride records (stored in this browser) ----------
+const KEY='tacx.records.v1';
+let db={users:[],last:null}, ride=null, curPow=0, curCad=0;
+try{ const s=JSON.parse(localStorage.getItem(KEY)); if(s&&Array.isArray(s.users)) db=s; }catch(e){}
+function saveDb(){ try{ localStorage.setItem(KEY,JSON.stringify(db)); }catch(e){ log('Could not save records: '+e.message); } }
+function currentUser(){ return db.users.find(u=>u.id===db.last)||null; }
+function showNew(show){ $('newUserRow').hidden=!show; if(show) $('newName').focus(); }
+function renderUsers(){
+  const sel=$('userSel'); sel.innerHTML='';
+  for(const u of db.users){ const o=document.createElement('option'); o.value=u.id; o.textContent=u.name; sel.appendChild(o); }
+  if(!currentUser()&&db.users.length) db.last=db.users[0].id;
+  if(db.last) sel.value=db.last;
+  sel.disabled=$('delUserBtn').disabled=!db.users.length;
+  if(!db.users.length) showNew(true);
+  renderRides();
+}
+function addUser(){
+  const name=$('newName').value.trim(); if(!name) return;
+  if(db.users.some(u=>u.name.toLowerCase()===name.toLowerCase())){ alert('A rider with that name already exists.'); return; }
+  const u={id:Date.now().toString(36),name,rides:[]};
+  db.users.push(u); db.last=u.id; saveDb(); $('newName').value=''; showNew(false); renderUsers();
+}
+const fmtDur=s=>{ const h=Math.floor(s/3600), m=Math.floor(s%3600/60), p=n=>String(n).padStart(2,'0'); return (h?h+':':'')+p(m)+':'+p(s%60); };
+function renderRides(){
+  const u=currentUser(), tb=$('rideRows'); tb.innerHTML='';
+  $('histTitle').textContent=u?`Ride history: ${u.name}`:'Ride history';
+  if(!u||!u.rides.length){ tb.innerHTML='<tr><td colspan="7">No rides saved yet.</td></tr>'; return; }
+  for(const r of u.rides){
+    const d=new Date(r.t), tr=document.createElement('tr');
+    [d.toLocaleDateString(undefined,{day:'numeric',month:'short',year:'numeric'})+' '+d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}),
+     fmtDur(r.sec), r.km.toFixed(2), r.avgP, r.maxP, r.avgC, r.climb].forEach(v=>{ const td=document.createElement('td'); td.textContent=v; tr.appendChild(td); });
+    tb.appendChild(tr);
+  }
+}
+function finishRide(){
+  const u=currentUser(); stopRide();
+  if(!ride||!u) return;
+  if(ride.sec<10){ log('Ride too short to save'); }
+  else{
+    const i=route?Math.min(route.ele.length-1,Math.round(pos/STEP)):0;
+    const r={t:ride.start.toISOString(),sec:Math.round(ride.sec),km:+(ride.dist/1000).toFixed(2),
+      avgP:ride.n?Math.round(ride.pSum/ride.n):0,maxP:ride.pMax,avgC:ride.cN?Math.round(ride.cSum/ride.cN):0,
+      climb:route?Math.round(route.climb[i]):0,route:ride.route};
+    u.rides.unshift(r); saveDb(); log(`Saved ride for ${u.name}: ${r.km} km`);
+  }
+  ride=null; $('finishBtn').disabled=true; renderRides();
+}
+function download(name,text,type){
+  const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([text],{type})); a.download=name; a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+}
+function exportCsv(){
+  const u=currentUser(); if(!u||!u.rides.length){ alert('No rides to export.'); return; }
+  const rows=['date,time,duration_s,distance_km,avg_power_w,max_power_w,avg_cadence_rpm,climb_m,route'];
+  for(const r of u.rides){
+    const d=new Date(r.t);
+    rows.push([d.toLocaleDateString('en-CA'),d.toLocaleTimeString('en-GB'),r.sec,r.km,r.avgP,r.maxP,r.avgC,r.climb,'"'+String(r.route).replace(/"/g,'""')+'"'].join(','));
+  }
+  download(`${u.name.replace(/\W+/g,'_')}-rides.csv`,rows.join('\n'),'text/csv');
+}
+$('userSel').onchange=e=>{ db.last=e.target.value; saveDb(); renderRides(); };
+$('newUserBtn').onclick=()=>showNew(true);
+$('cancelUserBtn').onclick=()=>showNew(!db.users.length);
+$('saveUserBtn').onclick=addUser;
+$('newName').onkeydown=e=>{ if(e.key==='Enter') addUser(); };
+$('delUserBtn').onclick=()=>{
+  const u=currentUser(); if(!u||!confirm(`Delete ${u.name} and all their rides?`)) return;
+  db.users=db.users.filter(x=>x.id!==u.id); db.last=null; saveDb(); renderUsers();
+};
+$('finishBtn').onclick=finishRide;
+$('csvBtn').onclick=exportCsv;
+$('backupBtn').onclick=()=>download('tacx-backup.json',JSON.stringify(db,null,1),'application/json');
+$('restoreFile').onchange=async e=>{
+  const f=e.target.files[0]; e.target.value=''; if(!f) return;
+  try{
+    const s=JSON.parse(await f.text());
+    if(!s||!Array.isArray(s.users)) throw new Error('This is not a backup file from this page.');
+    if(!confirm('Replace all riders and rides on this device with the backup?')) return;
+    db={users:s.users,last:s.last||null}; saveDb(); renderUsers(); log('Backup restored');
+  }catch(err){ alert(err.message); }
+};
+renderUsers();
+
+// ---------- Map (OpenTopoMap and OpenStreetMap tiles via Leaflet) ----------
+let map=null, baseLine=null, doneLine=null, dot=null, lastMapI=-1, zoomed=false;
+function mapMessage(text){
+  $('map').hidden=true; $('mapBar').hidden=true;
+  $('mapNote').hidden=!text; $('mapNote').textContent=text||'';
+}
+function mapSetRoute(){
+  if(!route||!route.ll){ mapMessage('This route has no map coordinates. Load a GPX file to see it on the map.'); return; }
+  if(typeof L==='undefined'){ mapMessage('The map library could not load. Check the internet connection and reload.'); return; }
+  mapMessage(''); $('map').hidden=false; $('mapBar').hidden=false;
+  if(!map){
+    map=L.map('map');
+    const topo=L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',{maxZoom:17,attribution:'Map data &copy; OpenStreetMap contributors, SRTM | Style &copy; OpenTopoMap (CC-BY-SA)'});
+    const street=L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; OpenStreetMap contributors'});
+    topo.addTo(map); L.control.layers({'Topographic':topo,'Street map':street}).addTo(map);
+  }
+  if(baseLine){ map.removeLayer(baseLine); map.removeLayer(doneLine); map.removeLayer(dot); }
+  baseLine=L.polyline(route.ll,{color:'#2b6cb0',weight:5,opacity:.9}).addTo(map);
+  doneLine=L.polyline([],{color:'#f2b134',weight:6}).addTo(map);
+  dot=L.circleMarker(route.ll[0],{radius:8,color:'#14181c',weight:2,fillColor:'#f2b134',fillOpacity:1}).addTo(map);
+  lastMapI=-1; zoomed=false; map.invalidateSize(); map.fitBounds(baseLine.getBounds(),{padding:[20,20]});
+}
+function mapUpdate(){
+  if(!map||!route||!route.ll||!dot) return;
+  const i=Math.min(route.ll.length-1,Math.round(pos/STEP));
+  if(i===lastMapI) return;
+  lastMapI=i; dot.setLatLng(route.ll[i]); doneLine.setLatLngs(route.ll.slice(0,i+1));
+  if(riding&&$('follow').checked){
+    if(!zoomed){ map.setView(route.ll[i],15,{animate:false}); zoomed=true; }
+    else map.setView(route.ll[i],map.getZoom(),{animate:false});
+  }
+}
+$('wholeBtn').onclick=()=>{ if(map&&baseLine){ zoomed=true; map.fitBounds(baseLine.getBounds(),{padding:[20,20]}); } };
 
 // ---------- Wiring ----------
 $('connectBtn').onclick=connect;

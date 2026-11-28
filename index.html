@@ -38,6 +38,20 @@
   .note { color:var(--dim); font-size:.9rem; margin:8px 0 0; }
   [hidden] { display:none !important; }
   #map { height:340px; margin-top:12px; border-radius:8px; border:1px solid var(--line); }
+  #big { position:fixed; inset:0; z-index:1000; background:#000; color:#fff; display:flex; flex-direction:column; gap:10px; padding:max(10px,env(safe-area-inset-top)) 12px max(10px,env(safe-area-inset-bottom)); }
+  .brow { display:grid; gap:10px; min-height:0; }
+  .brow.top { flex:5; grid-template-columns:1.5fr 1fr 1fr; }
+  .brow.mid { flex:2; grid-template-columns:repeat(4,1fr); }
+  .bt { background:#111; border:1px solid #333; border-radius:14px; padding:8px 14px; display:flex; flex-direction:column; justify-content:center; min-width:0; overflow:hidden; }
+  .bl { color:#9aa7b2; font-size:clamp(.9rem,2.6vh,1.5rem); }
+  .bv { font-weight:700; line-height:1; font-variant-numeric:tabular-nums; white-space:nowrap; }
+  .bv small { font-size:.28em; font-weight:400; color:#9aa7b2; margin-left:.25em; }
+  #bPower { color:var(--accent); font-size:min(30vh,19vw); }
+  #bCad, #bGrade { font-size:min(24vh,13vw); }
+  .brow.mid .bv { font-size:min(10vh,7vw); }
+  #bigChartWrap { flex:3; min-height:0; position:relative; }
+  #bigChart { position:absolute; inset:0; width:100%; height:100%; margin:0; }
+  .bbar { display:flex; gap:10px; justify-content:flex-end; }
   #profRow label { display:inline-flex; align-items:center; gap:8px; }
   #mapBar label { display:inline-flex; align-items:center; gap:8px; min-height:48px; }
   input[type=checkbox] { width:22px; height:22px; accent-color:var(--accent); }
@@ -91,6 +105,7 @@
   <div class="row">
     <span id="routeName">No route</span>
     <button id="startBtn" class="primary" disabled>Start ride</button>
+    <button id="bigBtn">Ride screen</button>
     <button id="resetBtn">Back to start</button>
     <button id="finishBtn" disabled>Finish &amp; save</button>
     <button id="demoBtn">Demo route</button>
@@ -149,6 +164,26 @@
   <h2>Log</h2>
   <div id="log" aria-live="polite"></div>
 </section>
+
+<div id="big" hidden>
+  <div class="brow top">
+    <div class="bt"><div class="bl">POWER</div><div class="bv" id="bPower">--<small>W</small></div></div>
+    <div class="bt"><div class="bl">CADENCE</div><div class="bv" id="bCad">--<small>rpm</small></div></div>
+    <div class="bt"><div class="bl" id="bGradeLbl">GRADIENT</div><div class="bv" id="bGrade">0.0<small>%</small></div></div>
+  </div>
+  <div class="brow mid">
+    <div class="bt"><div class="bl">SPEED</div><div class="bv" id="bSpeed">--<small>km/h</small></div></div>
+    <div class="bt"><div class="bl">DISTANCE</div><div class="bv" id="bDist">0.00<small>km</small></div></div>
+    <div class="bt"><div class="bl">TO GO</div><div class="bv" id="bLeft">0.00<small>km</small></div></div>
+    <div class="bt"><div class="bl">TIME</div><div class="bv" id="bTime">00:00</div></div>
+  </div>
+  <div id="bigChartWrap"><canvas id="bigChart"></canvas></div>
+  <div class="bbar">
+    <button id="bStart" class="primary">Start ride</button>
+    <button id="bFinish">Finish &amp; save</button>
+    <button id="bExit">Exit</button>
+  </div>
+</div>
 
 <script>
 // ---------- Tacx FE-C over Bluetooth ----------
@@ -361,7 +396,7 @@ setInterval(()=>{ // gradient to trainer, once a second, eased so it never jumps
 // ---------- Display ----------
 function gradeColor(g){ return g<=-1?'#4a86b5':g<3?'#4a9d6f':g<6?'#c9b64a':g<9?'#e08a3c':'#d8584a'; }
 function update(){
-  if(!route){ draw(); return; }
+  if(!route){ drawAll(); return; }
   const i=Math.min(route.ele.length-1,Math.round(pos/STEP));
   $('dRidden').textContent=(pos/1000).toFixed(2);
   $('dLeft').textContent=((route.total-pos)/1000).toFixed(2);
@@ -370,10 +405,11 @@ function update(){
   mapUpdate();
   const gs=prof().scale;
   $('gradeLbl').textContent=gs===100?'Gradient':`Gradient (route ${gradeAt(pos).toFixed(1)}% × ${gs}%)`;
-  draw();
+  drawAll();
 }
-function draw(){
-  const c=$('chart'), dpr=window.devicePixelRatio||1, w=c.clientWidth, h=c.clientHeight;
+function drawAll(){ draw($('chart')); if(bigOpen) draw($('bigChart')); }
+function draw(c){
+  const dpr=window.devicePixelRatio||1, w=c.clientWidth, h=c.clientHeight;
   if(c.width!==Math.round(w*dpr)){ c.width=Math.round(w*dpr); c.height=Math.round(h*dpr); }
   const g=c.getContext('2d'); g.setTransform(dpr,0,0,dpr,0,0); g.clearRect(0,0,w,h);
   if(!route) return;
@@ -391,7 +427,7 @@ function draw(){
   g.strokeStyle='#e8ecef'; g.lineWidth=2; g.beginPath(); g.moveTo(xPos,T); g.lineTo(xPos,T+ph); g.stroke();
   g.fillStyle='#e8ecef'; g.beginPath(); g.arc(xPos,yy,6,0,7); g.fill();
 }
-window.addEventListener('resize',draw);
+window.addEventListener('resize',drawAll);
 
 // ---------- Riders and ride records (stored in this browser) ----------
 const KEY='tacx.records.v1';
@@ -601,6 +637,46 @@ function mapUpdate(){
   }
 }
 $('wholeBtn').onclick=()=>{ if(map&&baseLine){ zoomed=true; map.fitBounds(baseLine.getBounds(),{padding:[20,20]}); } };
+
+// ---------- Full-screen ride screen ----------
+let bigOpen=false, wake=null;
+function bset(id,val,unit){
+  const el=$(id), t=unit?`${val}<small>${unit}</small>`:String(val);
+  if(el.dataset.v!==t){ el.dataset.v=t; el.innerHTML=t; }
+}
+function bigRefresh(){ // copies the live values from the normal screen, so there is one source of truth
+  if(!bigOpen) return;
+  bset('bPower',$('power').textContent,'W');
+  bset('bCad',$('cadence').textContent,'rpm');
+  const g=parseFloat($('gradeNow').textContent)||0;
+  bset('bGrade',g.toFixed(1),'%'); $('bGrade').style.color=gradeColor(g);
+  bset('bSpeed',$('speed').textContent,'km/h');
+  bset('bDist',$('dRidden').textContent,'km'); bset('bLeft',$('dLeft').textContent,'km');
+  bset('bTime',fmtDur(ride?Math.round(ride.sec):0));
+  $('bGradeLbl').textContent=$('gradeLbl').textContent.toUpperCase();
+  $('bStart').textContent=$('startBtn').textContent; $('bStart').disabled=$('startBtn').disabled;
+  $('bFinish').disabled=$('finishBtn').disabled;
+}
+setInterval(bigRefresh,250);
+async function keepAwake(on){
+  try{
+    if(on&&navigator.wakeLock&&!wake){ wake=await navigator.wakeLock.request('screen'); wake.addEventListener('release',()=>{ wake=null; }); }
+    else if(!on&&wake){ await wake.release(); wake=null; }
+  }catch(e){}
+}
+function openBig(){
+  bigOpen=true; $('big').hidden=false; bigRefresh(); draw($('bigChart')); keepAwake(true);
+  if($('big').requestFullscreen) $('big').requestFullscreen().catch(()=>{});
+  setTimeout(()=>draw($('bigChart')),200);
+}
+function closeBig(){
+  bigOpen=false; $('big').hidden=true; keepAwake(false);
+  if(document.fullscreenElement) document.exitFullscreen().catch(()=>{});
+}
+document.addEventListener('fullscreenchange',()=>{ if(bigOpen&&!document.fullscreenElement) closeBig(); else drawAll(); });
+document.addEventListener('visibilitychange',()=>{ if(bigOpen&&document.visibilityState==='visible') keepAwake(true); });
+$('bigBtn').onclick=openBig; $('bExit').onclick=closeBig;
+$('bStart').onclick=()=>$('startBtn').click(); $('bFinish').onclick=()=>$('finishBtn').click();
 
 // ---------- Wiring ----------
 $('connectBtn').onclick=connect;

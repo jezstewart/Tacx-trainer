@@ -15,7 +15,7 @@ There is nothing to install and no build step. The whole app is one file, `index
 - Keeps a record for each rider: a gradient scale, rider weight and bike weight, plus a history of rides
 - Exports rides as FIT files (virtual rides) and as CSV, and backs up all records
 - Has a full-screen ride display with large numbers over the map and elevation graph
-- Has an optional 3D terrain view with a tilted camera that follows you along the route
+- Has an optional 3D view with real terrain, 3D buildings, roads, relief shading, vineyards and orchards, and a sky, seen from a camera that follows you along the route
 
 ## What you need
 
@@ -59,7 +59,7 @@ To see a new version after you update the file, add something like `?v=2` to the
 
 **Ride screen**
 
-Press **Ride screen** for a full-screen display. It shows power, cadence, gradient and speed over the map, and distance, distance to go and time over the elevation graph. Start/Pause, Finish & save and Exit are on screen. Press **3D** to switch the map to the 3D terrain view and **2D** to switch back.
+Press **Ride screen** for a full-screen display. It shows power, cadence, gradient and speed over the map, and distance, distance to go and time over the elevation graph. Start/Pause, Finish & save and Exit are on screen. Press **3D** to switch the map to the 3D view and **2D** to switch back. In 3D, the **Topo** button switches to a lighter topographic map without buildings, and **Detailed** switches back.
 
 **Ride history**
 
@@ -84,6 +84,7 @@ The page calls these free services from your browser. They are meant for light, 
 | Elevation lookup | Open-Meteo Elevation API (Copernicus DEM, about 90 m resolution) |
 | Bike routing when planning | OpenStreetMap bike router at routing.openstreetmap.de |
 | Place search | Nominatim (OpenStreetMap) |
+| 3D map, buildings and roads | OpenFreeMap (Liberty style) |
 | 3D terrain | AWS terrain tiles (Tilezen) |
 | Map libraries | Leaflet (cdnjs) and MapLibre GL JS (jsDelivr) |
 
@@ -101,13 +102,14 @@ The page uses the Tacx FE-C over Bluetooth service.
 - Very large GPX files, such as one of about 7.6 MB, still fail with a "maximum call stack size exceeded" error. A first fix was not enough.
 - FIT export has been checked with a standard FIT reader, but I have not yet confirmed an upload to Strava or Garmin Connect.
 - The 3D view has not yet been tried on a trainer ride. It needs WebGL, which some browsers, including some on a Raspberry Pi, do not provide.
-- Planned: an appearance tab to change the size, colour and opacity of the ride screen numbers, camera settings for the 3D view, and scenery such as buildings.
+- Planned: an appearance tab to change the size, colour and opacity of the ride screen numbers, camera settings for the 3D view, and more scenery such as trees.
+- Planned: a ride-along video mode that plays a filmed route in step with your speed.
 
 ## Credits and licences
 
 - Map data is by [OpenStreetMap contributors](https://www.openstreetmap.org/copyright). OpenTopoMap is licensed CC-BY-SA.
 - Elevation data is Copernicus DEM, served by [Open-Meteo.com](https://open-meteo.com/).
-- 3D terrain uses [Tilezen](https://github.com/tilezen/joerd/blob/master/docs/attribution.md) elevation tiles.
+- The 3D map uses [OpenFreeMap](https://openfreemap.org/) vector tiles, built from OpenStreetMap data, and [Tilezen](https://github.com/tilezen/joerd/blob/master/docs/attribution.md) elevation tiles.
 - Maps are drawn with [Leaflet](https://leafletjs.com/) and [MapLibre GL JS](https://maplibre.org/).
 
 This project does not yet have a licence. Add a `LICENSE` file if you intend to share or reuse it.

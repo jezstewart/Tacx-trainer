@@ -51,8 +51,12 @@
   .bv { font-weight:700; line-height:1.05; font-variant-numeric:tabular-nums; white-space:nowrap; font-size:min(9vh,7vw); }
   #bPower { color:var(--accent); }
   #big #mapBar { position:absolute; left:10px; bottom:10px; z-index:1100; background:rgba(0,0,0,.55); padding:2px 10px; border-radius:10px; }
-  .bbar { display:flex; flex-wrap:wrap; align-items:flex-end; gap:6px 18px; padding:6px 12px 8px; background:#000; }
-  .bbtns { margin-left:auto; display:flex; gap:10px; }
+  .bbar { position:absolute; left:8px; right:8px; bottom:8px; z-index:1100; display:flex; flex-wrap:wrap; align-items:flex-end; gap:6px 18px; pointer-events:none; text-shadow:0 0 4px #000,0 0 9px #000,0 0 16px #000,1px 1px 2px #000; }
+  .bbtns { margin-left:auto; display:flex; gap:10px; pointer-events:auto; text-shadow:none; }
+  .bbtns button { background:rgba(0,0,0,.6); border-color:rgba(255,255,255,.35); }
+  .bbtns button.primary { background:var(--accent); border-color:var(--accent); }
+  #plMap { height:420px; margin-top:12px; border-radius:8px; border:1px solid var(--line); }
+  #builder label { display:inline-flex; align-items:center; gap:8px; min-height:48px; }
   #profRow label { display:inline-flex; align-items:center; gap:8px; }
   #mapBar label { display:inline-flex; align-items:center; gap:8px; min-height:48px; }
   input[type=checkbox] { width:22px; height:22px; accent-color:var(--accent); }
@@ -130,6 +134,32 @@
 </section>
 
 <section>
+  <details id="builder">
+    <summary>Plan a route</summary>
+    <div class="row" style="margin-top:12px">
+      <input id="plSearch" type="text" placeholder="Search for a place" aria-label="Search for a place" style="flex:1 1 220px">
+      <button id="plGo">Go</button>
+      <button id="plLoc">My location</button>
+    </div>
+    <div id="plMap"></div>
+    <p class="note" id="plMsg">Search for a place, then tap the map to add points. The route follows roads and paths that suit bikes.</p>
+    <div class="row">
+      <label><input type="checkbox" id="plSnap" checked> Follow roads</label>
+      <button id="plUndo">Undo</button>
+      <button id="plLoop">Back to start</button>
+      <button id="plClear">Clear</button>
+      <strong id="plDist">0.0 km</strong>
+    </div>
+    <div class="row" style="margin-top:12px">
+      <input id="plName" type="text" value="My route" maxlength="60" aria-label="Route name">
+      <button id="plRide" class="primary">Ride this route</button>
+      <button id="plGpx">Download GPX</button>
+    </div>
+    <p class="note">Elevation comes from Copernicus DEM via Open-Meteo.com. Routing uses the free OpenStreetMap bike router, which is meant for light use.</p>
+  </details>
+</section>
+
+<section>
   <details>
     <summary>Manual controls</summary>
     <div class="row" style="margin-top:12px">
@@ -178,8 +208,7 @@
   </div>
   <div id="bigChartWrap">
     <canvas id="bigChart"></canvas>
-  </div>
-  <div class="bbar">
+    <div class="bbar">
     <div class="bt"><div class="bl">DISTANCE (km)</div><div class="bv" id="bDist">0.00</div></div>
     <div class="bt"><div class="bl">TO GO (km)</div><div class="bv" id="bLeft">0.00</div></div>
     <div class="bt"><div class="bl">TIME</div><div class="bv" id="bTime">00:00</div></div>
@@ -187,6 +216,7 @@
       <button id="bStart" class="primary">Start ride</button>
       <button id="bFinish">Finish &amp; save</button>
       <button id="bExit">Exit</button>
+    </div>
     </div>
   </div>
 </div>
@@ -354,6 +384,16 @@ async function addElevation(pts,progress){
   last=last.e; S.forEach(p=>{ if(p.e===null) p.e=last; else last=p.e; });
   return S;
 }
+// Elevation for every point of a path: look up samples about every 100 m, then interpolate onto the original points
+async function withElevation(pts,progress){
+  const S=await addElevation(pts,progress); let j=0;
+  for(const p of pts){
+    while(j<S.length-2&&S[j+1].d<p.d) j++;
+    const a=S[j], b=S[j+1], t=b.d>a.d?Math.min(1,Math.max(0,(p.d-a.d)/(b.d-a.d))):0;
+    p.e=a.e+(b.e-a.e)*t;
+  }
+  return pts;
+}
 function restoreStatus(){ if(writeChar&&device) setStatus(`Connected to ${device.name}`,'ok'); else setStatus('Not connected'); }
 
 // ---------- Riding ----------
@@ -428,7 +468,7 @@ function draw(c){
   }
   g.globalAlpha=1; g.fillStyle='#8b98a3'; g.font='12px system-ui,sans-serif';
   g.textAlign='right'; g.fillText(Math.round(hi)+' m',L-6,T+10); g.fillText(Math.round(lo)+' m',L-6,T+ph);
-  g.textAlign='left'; g.fillText('0 km',L,h-6); g.textAlign='right'; g.fillText((route.total/1000).toFixed(1)+' km',L+pw,h-6);
+  if(c.id!=='bigChart'){ g.textAlign='left'; g.fillText('0 km',L,h-6); g.textAlign='right'; g.fillText((route.total/1000).toFixed(1)+' km',L+pw,h-6); }
   const yy=yOf(route.ele[Math.min(n-1,Math.round(pos/STEP))]);
   g.strokeStyle='#e8ecef'; g.lineWidth=2; g.beginPath(); g.moveTo(xPos,T); g.lineTo(xPos,T+ph); g.stroke();
   g.fillStyle='#e8ecef'; g.beginPath(); g.arc(xPos,yy,6,0,7); g.fill();
@@ -644,6 +684,103 @@ function mapUpdate(){
 }
 $('wholeBtn').onclick=()=>{ if(map&&baseLine){ zoomed=true; map.fitBounds(baseLine.getBounds(),{padding:[20,20]}); } };
 
+// ---------- Route planner ----------
+let plMap=null, plLine=null, plMarks=null, plPts=[], plSeg=[], plBusy=false;
+const hav=(a,b)=>{
+  const R=6371000, r=Math.PI/180, dLat=(b[0]-a[0])*r, dLon=(b[1]-a[1])*r;
+  const h=Math.sin(dLat/2)**2+Math.cos(a[0]*r)*Math.cos(b[0]*r)*Math.sin(dLon/2)**2;
+  return 2*R*Math.asin(Math.sqrt(h));
+};
+const plPath=()=>plSeg.length?plSeg.flatMap((sg,i)=>i?sg.slice(1):sg):plPts.slice();
+const plSay=t=>{ $('plMsg').textContent=t; };
+function plInit(){
+  if(plMap) return;
+  if(typeof L==='undefined'){ plSay('The map library could not load. Check the internet connection and reload.'); return; }
+  plMap=L.map('plMap').setView([20,0],2);
+  const topo=L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',{maxZoom:17,attribution:'Map data &copy; OpenStreetMap contributors, SRTM | Style &copy; OpenTopoMap (CC-BY-SA)'});
+  const street=L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; OpenStreetMap contributors'});
+  topo.addTo(plMap); L.control.layers({'Topographic':topo,'Street map':street}).addTo(plMap);
+  plLine=L.polyline([],{color:'#d8584a',weight:5,opacity:.9}).addTo(plMap);
+  plMarks=L.layerGroup().addTo(plMap);
+  plMap.on('click',e=>plAdd([e.latlng.lat,e.latlng.lng]));
+  if(route&&route.ll) plMap.fitBounds(L.latLngBounds(route.ll),{padding:[20,20]});
+}
+function plDraw(){
+  if(!plMap) return;
+  const path=plPath(); plLine.setLatLngs(path); plMarks.clearLayers();
+  plPts.forEach((p,i)=>L.circleMarker(p,{radius:(i===0||i===plPts.length-1)?8:5,color:'#14181c',weight:2,
+    fillColor:i===0?'#5fcf8e':(i===plPts.length-1?'#ef6b5f':'#e8ecef'),fillOpacity:1}).addTo(plMarks));
+  let d=0; for(let i=1;i<path.length;i++) d+=hav(path[i-1],path[i]);
+  $('plDist').textContent=(d/1000).toFixed(1)+' km';
+}
+async function plBike(a,b){
+  const url=`https://routing.openstreetmap.de/routed-bike/route/v1/driving/${a[1]},${a[0]};${b[1]},${b[0]}?overview=full&geometries=geojson`;
+  const r=await fetch(url);
+  if(!r.ok) throw new Error('The routing service returned an error ('+r.status+')');
+  const j=await r.json();
+  if(j.code!=='Ok'||!j.routes||!j.routes[0]) throw new Error('No bike route was found between those points');
+  return j.routes[0].geometry.coordinates.map(c=>[c[1],c[0]]);
+}
+async function plAdd(ll){
+  if(plBusy) return;
+  if(!plPts.length){ plPts.push(ll); plDraw(); plSay('Now tap where the route should go next.'); return; }
+  const from=plSeg.length?plSeg[plSeg.length-1].at(-1):plPts[plPts.length-1];
+  let seg=[from,ll];
+  if($('plSnap').checked){
+    plBusy=true; plSay('Finding a bike route...');
+    try{ seg=await plBike(from,ll); plSay('Tap the map to keep adding points.'); }
+    catch(e){ plSay(`${e.message}. A straight line was used for that stretch.`); }
+    plBusy=false;
+  }
+  plPts.push(seg[seg.length-1]); plSeg.push(seg); plDraw();
+}
+async function plFind(){
+  const q=$('plSearch').value.trim(); if(!q) return;
+  plInit(); if(!plMap) return;
+  try{
+    const r=await fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&q='+encodeURIComponent(q));
+    const j=await r.json();
+    if(!j.length){ plSay('Place not found. Try a more specific name.'); return; }
+    plMap.setView([parseFloat(j[0].lat),parseFloat(j[0].lon)],13);
+  }catch(e){ plSay('Search failed: '+e.message); }
+}
+async function plBuild(){
+  const path=plPath();
+  if(path.length<2){ alert('Add at least two points on the map first.'); return null; }
+  const pts=[]; let d=0;
+  path.forEach((p,i)=>{ if(i) d+=hav(path[i-1],p); pts.push({d,e:null,lat:p[0],lon:p[1]}); });
+  if(d<100){ alert('This route is too short. Add more points.'); return null; }
+  try{ await withElevation(pts,(a,b)=>setStatus(`Looking up elevation ${a} of ${b} points...`)); restoreStatus(); return pts; }
+  catch(e){ setStatus(e.message,'err'); log(`Elevation error: ${e.message}`); return null; }
+}
+function toGpx(name,pts){
+  const esc=t=>t.replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
+  return '<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="Tacx route rider" xmlns="http://www.topografix.com/GPX/1/1">\n<trk><name>'+esc(name)+'</name><trkseg>\n'
+    +pts.map(p=>`<trkpt lat="${p.lat.toFixed(6)}" lon="${p.lon.toFixed(6)}"><ele>${p.e.toFixed(1)}</ele></trkpt>`).join('\n')+'\n</trkseg></trk></gpx>\n';
+}
+$('builder').addEventListener('toggle',()=>{ if($('builder').open){ plInit(); setTimeout(()=>{ if(plMap) plMap.invalidateSize(); },150); } });
+$('plGo').onclick=plFind;
+$('plSearch').onkeydown=e=>{ if(e.key==='Enter') plFind(); };
+$('plLoc').onclick=()=>{
+  plInit(); if(!plMap) return;
+  if(!navigator.geolocation){ plSay('This browser cannot find your location.'); return; }
+  navigator.geolocation.getCurrentPosition(p=>plMap.setView([p.coords.latitude,p.coords.longitude],13),e=>plSay('Could not get your location: '+e.message));
+};
+$('plUndo').onclick=()=>{ if(plPts.length){ plPts.pop(); plSeg.pop(); plDraw(); } };
+$('plClear').onclick=()=>{ plPts=[]; plSeg=[]; plDraw(); plSay('Tap the map to add the first point.'); };
+$('plLoop').onclick=()=>{ if(plPts.length>1) plAdd(plPts[0]); };
+$('plRide').onclick=async()=>{
+  const pts=await plBuild(); if(!pts) return;
+  const name=$('plName').value.trim()||'My route';
+  buildRoute(name,pts); log(`Planned route ready: ${name}`);
+  $('routeName').scrollIntoView({behavior:'smooth'});
+};
+$('plGpx').onclick=async()=>{
+  const pts=await plBuild(); if(!pts) return;
+  const name=$('plName').value.trim()||'My route';
+  download(name.replace(/\W+/g,'_')+'.gpx',toGpx(name,pts),'application/gpx+xml');
+};
+
 // ---------- Full-screen ride screen ----------
 let bigOpen=false, wake=null, mapAnchor=null;
 function bset(id,val){ const el=$(id), t=String(val); if(el.textContent!==t) el.textContent=t; }
@@ -706,7 +843,7 @@ $('gpxFile').onchange=async e=>{
     const r=parseGPX(await f.text(),f.name.replace(/\.gpx$/i,''));
     if(r.needsElevation){
       log('No elevation in this file, so it is being looked up online (about 90 m resolution).');
-      r.pts=await addElevation(r.pts,(a,b)=>setStatus(`Looking up elevation ${a} of ${b} points...`));
+      r.pts=await withElevation(r.pts,(a,b)=>setStatus(`Looking up elevation ${a} of ${b} points...`));
       restoreStatus(); log('Elevation added');
     }
     buildRoute(r.name,r.pts); log(`Loaded ${r.name}`);

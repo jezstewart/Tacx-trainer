@@ -38,20 +38,21 @@
   .note { color:var(--dim); font-size:.9rem; margin:8px 0 0; }
   [hidden] { display:none !important; }
   #map { height:340px; margin-top:12px; border-radius:8px; border:1px solid var(--line); }
-  #big { position:fixed; inset:0; z-index:1000; background:#000; color:#fff; display:flex; flex-direction:column; gap:10px; padding:max(10px,env(safe-area-inset-top)) 12px max(10px,env(safe-area-inset-bottom)); }
-  .brow { display:grid; gap:10px; min-height:0; }
-  .brow.top { flex:5; grid-template-columns:1.5fr 1fr 1fr; }
-  .brow.mid { flex:2; grid-template-columns:repeat(4,1fr); }
-  .bt { background:#111; border:1px solid #333; border-radius:14px; padding:8px 14px; display:flex; flex-direction:column; justify-content:center; min-width:0; overflow:hidden; }
-  .bl { color:#9aa7b2; font-size:clamp(.9rem,2.6vh,1.5rem); }
-  .bv { font-weight:700; line-height:1; font-variant-numeric:tabular-nums; white-space:nowrap; }
-  .bv small { font-size:.28em; font-weight:400; color:#9aa7b2; margin-left:.25em; }
-  #bPower { color:var(--accent); font-size:min(30vh,19vw); }
-  #bCad, #bGrade { font-size:min(24vh,13vw); }
-  .brow.mid .bv { font-size:min(10vh,7vw); }
-  #bigChartWrap { flex:3; min-height:0; position:relative; }
+  #big { position:fixed; inset:0; z-index:1000; background:#000; color:#fff; display:flex; flex-direction:column; padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom); }
+  #bigMapWrap { flex:11; min-height:0; position:relative; background:#0d1013; }
+  #bigChartWrap { flex:8; min-height:0; position:relative; background:#0d1013; border-top:2px solid #333; }
+  #bigMapWrap #map { position:absolute; inset:0; height:100%; margin:0; border:0; border-radius:0; }
+  #bigNoMap { position:absolute; inset:0; display:flex; align-items:flex-end; justify-content:center; padding:20px; color:#9aa7b2; }
   #bigChart { position:absolute; inset:0; width:100%; height:100%; margin:0; }
-  .bbar { display:flex; gap:10px; justify-content:flex-end; }
+  .bnums { position:absolute; top:8px; left:8px; right:8px; z-index:1100; display:grid; grid-template-columns:repeat(12,1fr); gap:8px; pointer-events:none; text-shadow:0 0 8px #000,0 0 3px #000; }
+  .bnums.n1 .bt { grid-column:span 3; }
+  .bnums.n2 .bt { grid-column:span 4; }
+  .bt { background:rgba(0,0,0,.42); border-radius:12px; padding:4px 12px 6px; min-width:0; }
+  .bl { color:#d5dde3; font-size:clamp(.8rem,2.4vh,1.3rem); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .bv { font-weight:700; line-height:1.05; font-variant-numeric:tabular-nums; white-space:nowrap; font-size:min(9vh,7vw); }
+  #bPower { color:var(--accent); }
+  #big #mapBar { position:absolute; left:10px; bottom:10px; z-index:1100; background:rgba(0,0,0,.55); padding:2px 10px; border-radius:10px; }
+  .bbar { display:flex; gap:10px; justify-content:flex-end; padding:8px 12px; background:#000; }
   #profRow label { display:inline-flex; align-items:center; gap:8px; }
   #mapBar label { display:inline-flex; align-items:center; gap:8px; min-height:48px; }
   input[type=checkbox] { width:22px; height:22px; accent-color:var(--accent); }
@@ -166,18 +167,23 @@
 </section>
 
 <div id="big" hidden>
-  <div class="brow top">
-    <div class="bt"><div class="bl">POWER</div><div class="bv" id="bPower">--<small>W</small></div></div>
-    <div class="bt"><div class="bl">CADENCE</div><div class="bv" id="bCad">--<small>rpm</small></div></div>
-    <div class="bt"><div class="bl" id="bGradeLbl">GRADIENT</div><div class="bv" id="bGrade">0.0<small>%</small></div></div>
+  <div id="bigMapWrap">
+    <div id="bigNoMap" hidden>No map for this route</div>
+    <div class="bnums n1">
+      <div class="bt"><div class="bl">POWER (W)</div><div class="bv" id="bPower">--</div></div>
+      <div class="bt"><div class="bl">CADENCE (rpm)</div><div class="bv" id="bCad">--</div></div>
+      <div class="bt"><div class="bl" id="bGradeLbl">GRADIENT</div><div class="bv" id="bGrade">0.0%</div></div>
+      <div class="bt"><div class="bl">SPEED (km/h)</div><div class="bv" id="bSpeed">--</div></div>
+    </div>
   </div>
-  <div class="brow mid">
-    <div class="bt"><div class="bl">SPEED</div><div class="bv" id="bSpeed">--<small>km/h</small></div></div>
-    <div class="bt"><div class="bl">DISTANCE</div><div class="bv" id="bDist">0.00<small>km</small></div></div>
-    <div class="bt"><div class="bl">TO GO</div><div class="bv" id="bLeft">0.00<small>km</small></div></div>
-    <div class="bt"><div class="bl">TIME</div><div class="bv" id="bTime">00:00</div></div>
+  <div id="bigChartWrap">
+    <canvas id="bigChart"></canvas>
+    <div class="bnums n2">
+      <div class="bt"><div class="bl">DISTANCE (km)</div><div class="bv" id="bDist">0.00</div></div>
+      <div class="bt"><div class="bl">TO GO (km)</div><div class="bv" id="bLeft">0.00</div></div>
+      <div class="bt"><div class="bl">TIME</div><div class="bv" id="bTime">00:00</div></div>
+    </div>
   </div>
-  <div id="bigChartWrap"><canvas id="bigChart"></canvas></div>
   <div class="bbar">
     <button id="bStart" class="primary">Start ride</button>
     <button id="bFinish">Finish &amp; save</button>
@@ -639,21 +645,18 @@ function mapUpdate(){
 $('wholeBtn').onclick=()=>{ if(map&&baseLine){ zoomed=true; map.fitBounds(baseLine.getBounds(),{padding:[20,20]}); } };
 
 // ---------- Full-screen ride screen ----------
-let bigOpen=false, wake=null;
-function bset(id,val,unit){
-  const el=$(id), t=unit?`${val}<small>${unit}</small>`:String(val);
-  if(el.dataset.v!==t){ el.dataset.v=t; el.innerHTML=t; }
-}
+let bigOpen=false, wake=null, mapAnchor=null;
+function bset(id,val){ const el=$(id), t=String(val); if(el.textContent!==t) el.textContent=t; }
 function bigRefresh(){ // copies the live values from the normal screen, so there is one source of truth
   if(!bigOpen) return;
-  bset('bPower',$('power').textContent,'W');
-  bset('bCad',$('cadence').textContent,'rpm');
+  bset('bPower',$('power').textContent);
+  bset('bCad',$('cadence').textContent);
   const g=parseFloat($('gradeNow').textContent)||0;
-  bset('bGrade',g.toFixed(1),'%'); $('bGrade').style.color=gradeColor(g);
-  bset('bSpeed',$('speed').textContent,'km/h');
-  bset('bDist',$('dRidden').textContent,'km'); bset('bLeft',$('dLeft').textContent,'km');
+  bset('bGrade',g.toFixed(1)+'%'); $('bGrade').style.color=gradeColor(g);
+  bset('bSpeed',$('speed').textContent);
+  bset('bDist',$('dRidden').textContent); bset('bLeft',$('dLeft').textContent);
   bset('bTime',fmtDur(ride?Math.round(ride.sec):0));
-  $('bGradeLbl').textContent=$('gradeLbl').textContent.toUpperCase();
+  bset('bGradeLbl',$('gradeLbl').textContent.toUpperCase());
   $('bStart').textContent=$('startBtn').textContent; $('bStart').disabled=$('startBtn').disabled;
   $('bFinish').disabled=$('finishBtn').disabled;
 }
@@ -664,16 +667,31 @@ async function keepAwake(on){
     else if(!on&&wake){ await wake.release(); wake=null; }
   }catch(e){}
 }
+function fitBigMap(){
+  if(!map) return;
+  map.invalidateSize();
+  if(!zoomed&&baseLine) map.fitBounds(baseLine.getBounds(),{padding:[20,20]});
+  else if(dot) map.setView(dot.getLatLng(),map.getZoom(),{animate:false});
+}
 function openBig(){
-  bigOpen=true; $('big').hidden=false; bigRefresh(); draw($('bigChart')); keepAwake(true);
+  bigOpen=true; $('big').hidden=false;
+  mapAnchor=document.createComment('map'); $('map').before(mapAnchor);   // move the map into the ride screen
+  $('bigMapWrap').append($('map'),$('mapBar'));
+  $('bigNoMap').hidden=!$('map').hidden;
+  bigRefresh(); draw($('bigChart')); keepAwake(true);
   if($('big').requestFullscreen) $('big').requestFullscreen().catch(()=>{});
-  setTimeout(()=>draw($('bigChart')),200);
+  setTimeout(()=>{ draw($('bigChart')); fitBigMap(); },250);
 }
 function closeBig(){
   bigOpen=false; $('big').hidden=true; keepAwake(false);
+  if(mapAnchor){ mapAnchor.after($('map'),$('mapBar')); mapAnchor.remove(); mapAnchor=null; }
   if(document.fullscreenElement) document.exitFullscreen().catch(()=>{});
+  setTimeout(()=>{ if(map) map.invalidateSize(); },100);
 }
-document.addEventListener('fullscreenchange',()=>{ if(bigOpen&&!document.fullscreenElement) closeBig(); else drawAll(); });
+document.addEventListener('fullscreenchange',()=>{
+  if(bigOpen&&!document.fullscreenElement) closeBig();
+  else if(bigOpen){ drawAll(); fitBigMap(); }
+});
 document.addEventListener('visibilitychange',()=>{ if(bigOpen&&document.visibilityState==='visible') keepAwake(true); });
 $('bigBtn').onclick=openBig; $('bExit').onclick=closeBig;
 $('bStart').onclick=()=>$('startBtn').click(); $('bFinish').onclick=()=>$('finishBtn').click();
@@ -703,3 +721,4 @@ demoRoute();
 </script>
 </body>
 </html>
+a

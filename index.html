@@ -44,15 +44,15 @@
   #bigMapWrap #map { position:absolute; inset:0; height:100%; margin:0; border:0; border-radius:0; }
   #bigNoMap { position:absolute; inset:0; display:flex; align-items:flex-end; justify-content:center; padding:20px; color:#9aa7b2; }
   #bigChart { position:absolute; inset:0; width:100%; height:100%; margin:0; }
-  .bnums { position:absolute; top:8px; left:8px; right:8px; z-index:1100; display:grid; grid-template-columns:repeat(12,1fr); gap:8px; pointer-events:none; text-shadow:0 0 8px #000,0 0 3px #000; }
+  .bnums { position:absolute; top:8px; left:8px; right:8px; z-index:1100; display:grid; grid-template-columns:repeat(12,1fr); gap:8px; pointer-events:none; text-shadow:0 0 4px #000,0 0 9px #000,0 0 16px #000,1px 1px 2px #000; }
   .bnums.n1 .bt { grid-column:span 3; }
-  .bnums.n2 .bt { grid-column:span 4; }
-  .bt { background:rgba(0,0,0,.42); border-radius:12px; padding:4px 12px 6px; min-width:0; }
+  .bt { padding:2px 10px 4px; min-width:0; }
   .bl { color:#d5dde3; font-size:clamp(.8rem,2.4vh,1.3rem); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .bv { font-weight:700; line-height:1.05; font-variant-numeric:tabular-nums; white-space:nowrap; font-size:min(9vh,7vw); }
   #bPower { color:var(--accent); }
   #big #mapBar { position:absolute; left:10px; bottom:10px; z-index:1100; background:rgba(0,0,0,.55); padding:2px 10px; border-radius:10px; }
-  .bbar { display:flex; gap:10px; justify-content:flex-end; padding:8px 12px; background:#000; }
+  .bbar { display:flex; flex-wrap:wrap; align-items:flex-end; gap:6px 18px; padding:6px 12px 8px; background:#000; }
+  .bbtns { margin-left:auto; display:flex; gap:10px; }
   #profRow label { display:inline-flex; align-items:center; gap:8px; }
   #mapBar label { display:inline-flex; align-items:center; gap:8px; min-height:48px; }
   input[type=checkbox] { width:22px; height:22px; accent-color:var(--accent); }
@@ -178,16 +178,16 @@
   </div>
   <div id="bigChartWrap">
     <canvas id="bigChart"></canvas>
-    <div class="bnums n2">
-      <div class="bt"><div class="bl">DISTANCE (km)</div><div class="bv" id="bDist">0.00</div></div>
-      <div class="bt"><div class="bl">TO GO (km)</div><div class="bv" id="bLeft">0.00</div></div>
-      <div class="bt"><div class="bl">TIME</div><div class="bv" id="bTime">00:00</div></div>
-    </div>
   </div>
   <div class="bbar">
-    <button id="bStart" class="primary">Start ride</button>
-    <button id="bFinish">Finish &amp; save</button>
-    <button id="bExit">Exit</button>
+    <div class="bt"><div class="bl">DISTANCE (km)</div><div class="bv" id="bDist">0.00</div></div>
+    <div class="bt"><div class="bl">TO GO (km)</div><div class="bv" id="bLeft">0.00</div></div>
+    <div class="bt"><div class="bl">TIME</div><div class="bv" id="bTime">00:00</div></div>
+    <div class="bbtns">
+      <button id="bStart" class="primary">Start ride</button>
+      <button id="bFinish">Finish &amp; save</button>
+      <button id="bExit">Exit</button>
+    </div>
   </div>
 </div>
 
@@ -416,7 +416,7 @@ function update(){
 function drawAll(){ draw($('chart')); if(bigOpen) draw($('bigChart')); }
 function draw(c){
   const dpr=window.devicePixelRatio||1, w=c.clientWidth, h=c.clientHeight;
-  if(c.width!==Math.round(w*dpr)){ c.width=Math.round(w*dpr); c.height=Math.round(h*dpr); }
+  if(c.width!==Math.round(w*dpr)||c.height!==Math.round(h*dpr)){ c.width=Math.round(w*dpr); c.height=Math.round(h*dpr); }
   const g=c.getContext('2d'); g.setTransform(dpr,0,0,dpr,0,0); g.clearRect(0,0,w,h);
   if(!route) return;
   const L=46,R=8,T=10,B=22, pw=w-L-R, ph=h-T-B, n=route.ele.length;
@@ -721,4 +721,3 @@ demoRoute();
 </script>
 </body>
 </html>
-a

@@ -6,6 +6,8 @@
 <title>Tacx route rider</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+<script src="https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
 <style>
   :root { --bg:#14181c; --panel:#1d2329; --line:#2e3740; --text:#e8ecef; --dim:#8b98a3; --accent:#f2b134; --bad:#ef6b5f; --good:#5fcf8e; }
   * { box-sizing: border-box; }
@@ -44,6 +46,12 @@
   #bigMapWrap #map { position:absolute; inset:0; height:100%; margin:0; border:0; border-radius:0; }
   #bigNoMap { position:absolute; inset:0; display:flex; align-items:flex-end; justify-content:center; padding:20px; color:#9aa7b2; }
   #bigChart { position:absolute; inset:0; width:100%; height:100%; margin:0; }
+  #map3d { position:absolute; inset:0; display:none; }
+  #bigMapWrap.is3d #map3d { display:block; }
+  #bigMapWrap.is3d #map, #bigMapWrap.is3d #mapBar { display:none !important; }
+  #big3d, #big3dStyle { position:absolute; bottom:10px; right:10px; z-index:1100; background:rgba(0,0,0,.6); color:#fff; border-color:rgba(255,255,255,.35); }
+  #big3dStyle { right:84px; }
+  #bigMapWrap:not(.is3d) #big3dStyle { display:none; }
   .bnums { position:absolute; top:8px; left:8px; right:8px; z-index:1100; display:grid; grid-template-columns:repeat(12,1fr); gap:8px; pointer-events:none; text-shadow:0 0 4px #000,0 0 9px #000,0 0 16px #000,1px 1px 2px #000; }
   .bnums.n1 .bt { grid-column:span 3; }
   .bt { padding:2px 10px 4px; min-width:0; }
@@ -203,6 +211,9 @@
 <div id="big" hidden>
   <div id="bigMapWrap">
     <div id="bigNoMap" hidden>No map for this route</div>
+    <div id="map3d"></div>
+    <button id="big3dStyle">Street</button>
+    <button id="big3d">3D</button>
     <div class="bnums n1">
       <div class="bt"><div class="bl">POWER (W)</div><div class="bv" id="bPower">--</div></div>
       <div class="bt"><div class="bl">CADENCE (rpm)</div><div class="bv" id="bCad">--</div></div>
@@ -452,7 +463,7 @@ function update(){
   $('dLeft').textContent=((route.total-pos)/1000).toFixed(2);
   $('climbed').textContent=Math.round(route.climb[i]);
   $('gradeNow').textContent=(riding?sentGrade:gradeAt(pos)).toFixed(1);
-  mapUpdate();
+  mapUpdate(); m3Update();
   const gs=prof().scale;
   $('gradeLbl').textContent=gs===100?'Gradient':`Gradient (route ${gradeAt(pos).toFixed(1)}% × ${gs}%)`;
   drawAll();
@@ -785,6 +796,90 @@ $('plGpx').onclick=async()=>{
   download(name.replace(/\W+/g,'_')+'.gpx',toGpx(name,pts),'application/gpx+xml');
 };
 
+// ---------- 3D terrain view (MapLibre GL) ----------
+const M3={pitch:65,zoom:14.3,exaggeration:1.5,riderLow:0.3,lookAhead:25,turnEase:0.25};
+let m3=null, m3On=false, m3Loaded=false, m3Last=-1, m3Bear=0, m3Topo=true, m3Coords=[], m3Step=1;
+const bearingTo=(a,b)=>{
+  const r=Math.PI/180, dl=(b[1]-a[1])*r;
+  const y=Math.sin(dl)*Math.cos(b[0]*r), x=Math.cos(a[0]*r)*Math.sin(b[0]*r)-Math.sin(a[0]*r)*Math.cos(b[0]*r)*Math.cos(dl);
+  return (Math.atan2(y,x)/r+360)%360;
+};
+const m3Line=c=>c.length>1?{type:'Feature',properties:{},geometry:{type:'LineString',coordinates:c}}:{type:'FeatureCollection',features:[]};
+const m3Pt=ll=>({type:'Feature',properties:{},geometry:{type:'Point',coordinates:[ll[1],ll[0]]}});
+function m3Init(){
+  if(m3) return true;
+  if(typeof maplibregl==='undefined'){ alert('The 3D map library could not load. Check the internet connection and reload.'); return false; }
+  const probe=document.createElement('canvas');
+  if(!(probe.getContext('webgl2')||probe.getContext('webgl'))){
+    alert('The 3D view needs WebGL, which this browser or device has switched off or does not support. The normal 2D map still works.');
+    return false;
+  }
+  try{ m3=new maplibregl.Map({
+    container:'map3d', center:[0,0], zoom:2, maxPitch:70, attributionControl:{compact:true},
+    style:{version:8,
+      sources:{
+        topo:{type:'raster',tiles:['a','b','c'].map(x=>`https://${x}.tile.opentopomap.org/{z}/{x}/{y}.png`),tileSize:256,maxzoom:17,attribution:'Map data &copy; OpenStreetMap contributors, SRTM | Style &copy; OpenTopoMap'},
+        osm:{type:'raster',tiles:['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],tileSize:256,maxzoom:19,attribution:'&copy; OpenStreetMap contributors'},
+        dem:{type:'raster-dem',tiles:['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'],encoding:'terrarium',tileSize:256,maxzoom:15,attribution:'Terrain: Tilezen / AWS Open Data'}
+      },
+      layers:[{id:'topo',type:'raster',source:'topo'},{id:'osm',type:'raster',source:'osm',layout:{visibility:'none'}}],
+      terrain:{source:'dem',exaggeration:M3.exaggeration}
+    }
+  }); }catch(e){ m3=null; alert('The 3D view could not start: '+e.message); return false; }
+  m3.on('load',()=>{
+    m3Loaded=true;
+    m3.addSource('route',{type:'geojson',data:m3Line([])});
+    m3.addSource('done',{type:'geojson',data:m3Line([])});
+    m3.addSource('me',{type:'geojson',data:{type:'FeatureCollection',features:[]}});
+    m3.addLayer({id:'route',type:'line',source:'route',layout:{'line-cap':'round','line-join':'round'},paint:{'line-color':'#2b6cb0','line-width':7}});
+    m3.addLayer({id:'done',type:'line',source:'done',layout:{'line-cap':'round','line-join':'round'},paint:{'line-color':'#f2b134','line-width':8}});
+    m3.addLayer({id:'me',type:'circle',source:'me',paint:{'circle-radius':10,'circle-color':'#f2b134','circle-stroke-color':'#14181c','circle-stroke-width':3}});
+    m3Route(); m3Last=-1; m3Update(true);
+  });
+  m3.on('error',e=>log('3D map: '+((e&&e.error&&e.error.message)||'tile or style error')));
+  return true;
+}
+function m3Route(){
+  if(!m3||!m3Loaded||!route||!route.ll) return;
+  m3Step=Math.max(1,Math.ceil(route.ll.length/4000));
+  m3Coords=route.ll.filter((_,k)=>k%m3Step===0).map(p=>[p[1],p[0]]);
+  m3.getSource('route').setData(m3Line(m3Coords));
+  m3.getSource('done').setData(m3Line([]));
+}
+function m3Update(force){
+  if(!m3On||!m3Loaded||!route||!route.ll) return;
+  const n=route.ll.length, i=Math.min(n-1,Math.round(pos/STEP));
+  if(i===m3Last&&!force) return;
+  m3Last=i;
+  const ll=route.ll[i], ahead=route.ll[Math.min(n-1,i+M3.lookAhead)];
+  m3.getSource('me').setData(m3Pt(ll));
+  m3.getSource('done').setData(m3Line(m3Coords.slice(0,Math.floor(i/m3Step)+1).concat([[ll[1],ll[0]]])));
+  if(ahead[0]!==ll[0]||ahead[1]!==ll[1]){            // turn the camera gently towards the road ahead
+    const t=bearingTo(ll,ahead), d=((t-m3Bear+540)%360)-180;
+    m3Bear=force?t:(m3Bear+d*M3.turnEase+360)%360;
+  }
+  const cam={center:[ll[1],ll[0]],bearing:m3Bear,pitch:M3.pitch,zoom:M3.zoom,
+    padding:{top:Math.round($('map3d').clientHeight*M3.riderLow),bottom:0,left:0,right:0}};
+  if(force) m3.jumpTo(cam); else m3.easeTo({...cam,duration:1000,easing:t=>t});
+}
+function set3d(on){
+  if(on&&(!route||!route.ll)){ alert('This route has no map coordinates, so the 3D view is not available for it.'); return; }
+  const wrap=$('bigMapWrap');
+  if(on){ wrap.classList.add('is3d'); if(!m3Init()){ wrap.classList.remove('is3d'); return; } }
+  else wrap.classList.remove('is3d');
+  m3On=on; $('big3d').textContent=on?'2D':'3D';
+  if(on) setTimeout(()=>{ m3.resize(); m3Route(); m3Last=-1; m3Update(true); },100);
+  else if(map) setTimeout(()=>map.invalidateSize(),50);
+}
+$('big3d').onclick=()=>set3d(!m3On);
+$('big3dStyle').onclick=()=>{
+  if(!m3||!m3Loaded) return;
+  m3Topo=!m3Topo;
+  m3.setLayoutProperty('topo','visibility',m3Topo?'visible':'none');
+  m3.setLayoutProperty('osm','visibility',m3Topo?'none':'visible');
+  $('big3dStyle').textContent=m3Topo?'Street':'Topo';
+};
+
 // ---------- Full-screen ride screen ----------
 let bigOpen=false, wake=null, mapAnchor=null;
 function bset(id,val){ const el=$(id), t=String(val); if(el.textContent!==t) el.textContent=t; }
@@ -824,6 +919,7 @@ function openBig(){
   setTimeout(()=>{ draw($('bigChart')); fitBigMap(); },250);
 }
 function closeBig(){
+  if(m3On) set3d(false);
   bigOpen=false; $('big').hidden=true; keepAwake(false);
   if(mapAnchor){ mapAnchor.after($('map'),$('mapBar')); mapAnchor.remove(); mapAnchor=null; }
   if(document.fullscreenElement) document.exitFullscreen().catch(()=>{});
@@ -831,7 +927,7 @@ function closeBig(){
 }
 document.addEventListener('fullscreenchange',()=>{
   if(bigOpen&&!document.fullscreenElement) closeBig();
-  else if(bigOpen){ drawAll(); fitBigMap(); }
+  else if(bigOpen){ drawAll(); fitBigMap(); if(m3On&&m3) m3.resize(); }
 });
 document.addEventListener('visibilitychange',()=>{ if(bigOpen&&document.visibilityState==='visible') keepAwake(true); });
 $('bigBtn').onclick=openBig; $('bExit').onclick=closeBig;

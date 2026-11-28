@@ -103,6 +103,7 @@
     <button id="wholeBtn">Whole route</button>
   </div>
   <p id="mapNote" class="note" hidden></p>
+  <p class="note">Elevation for files that have none: Copernicus DEM via Open-Meteo.com.</p>
   <div class="tiles" style="margin:12px 0 0">
     <div class="tile"><div class="label">Ridden</div><div class="value"><span id="dRidden">0.00</span><span class="unit">km</span></div></div>
     <div class="tile"><div class="label">Remaining</div><div class="value"><span id="dLeft">0.00</span><span class="unit">km</span></div></div>
@@ -132,7 +133,7 @@
   <h2 id="histTitle">Ride history</h2>
   <div class="tablewrap">
     <table>
-      <thead><tr><th>Date</th><th>Time</th><th>km</th><th>Avg W</th><th>Max W</th><th>Cadence</th><th>Climb m</th><th>Scale</th></tr></thead>
+      <thead><tr><th>Date</th><th>Time</th><th>km</th><th>Avg W</th><th>Max W</th><th>Cadence</th><th>Climb m</th><th>Scale</th><th></th></tr></thead>
       <tbody id="rideRows"></tbody>
     </table>
   </div>
@@ -276,12 +277,41 @@ function parseGPX(text,fallbackName){
     }
     prev=[lat,lon]; pts.push({d,e:lastE,lat,lon});
   }
-  if(!haveEle) throw new Error('This GPX file has no elevation data, so it would be flat.');
+  if(!haveEle){
+    if(d<100) throw new Error('This route is too short.');
+    const n0=doc.getElementsByTagName('name')[0];
+    return {name:(n0&&n0.textContent.trim())||fallbackName,pts,needsElevation:true};
+  }
   const first=pts.find(p=>p.e!==null).e; pts.forEach(p=>{ if(p.e===null) p.e=first; });
   if(pts.length<2||d<100) throw new Error('This route is too short.');
   const nm=doc.getElementsByTagName('name')[0];
   return {name:(nm&&nm.textContent.trim())||fallbackName,pts};
 }
+
+// Fill in elevation from the Open-Meteo elevation service (Copernicus 90 m terrain model)
+async function addElevation(pts,progress){
+  const total=pts[pts.length-1].d, n=Math.max(2,Math.min(3000,Math.ceil(total/100)+1)), S=[]; let j=0;
+  for(let i=0;i<n;i++){
+    const d=total*i/(n-1); while(j<pts.length-2&&pts[j+1].d<d) j++;
+    const a=pts[j], b=pts[j+1], t=b.d>a.d?Math.min(1,Math.max(0,(d-a.d)/(b.d-a.d))):0;
+    S.push({d,lat:a.lat+(b.lat-a.lat)*t,lon:a.lon+(b.lon-a.lon)*t,e:null});
+  }
+  for(let i=0;i<n;i+=100){
+    const c=S.slice(i,i+100);
+    const url='https://api.open-meteo.com/v1/elevation?latitude='+c.map(p=>p.lat.toFixed(5)).join(',')+'&longitude='+c.map(p=>p.lon.toFixed(5)).join(',');
+    const r=await fetch(url);
+    if(!r.ok) throw new Error('The elevation service returned an error ('+r.status+'). Try again in a minute.');
+    const data=await r.json();
+    if(!data.elevation||data.elevation.length!==c.length) throw new Error('Unexpected reply from the elevation service.');
+    c.forEach((p,k)=>p.e=data.elevation[k]);
+    progress(Math.min(n,i+100),n);
+  }
+  let last=S.find(p=>p.e!==null);
+  if(!last) throw new Error('The elevation service has no data for this area.');
+  last=last.e; S.forEach(p=>{ if(p.e===null) p.e=last; else last=p.e; });
+  return S;
+}
+function restoreStatus(){ if(writeChar&&device) setStatus(`Connected to ${device.name}`,'ok'); else setStatus('Not connected'); }
 
 // ---------- Riding ----------
 function gradeAt(p){
@@ -292,7 +322,7 @@ function gradeAt(p){
 function startRide(){
   if(!route||!writeChar) return;
   if(!currentUser()){ alert('Add a rider first, so the ride can be saved.'); return; }
-  if(!ride) ride={start:new Date(),sec:0,dist:0,pSum:0,pMax:0,n:0,cSum:0,cN:0,route:route.name};
+  if(!ride) ride={start:new Date(),sec:0,dist:0,pSum:0,pMax:0,n:0,cSum:0,cN:0,s:[],route:route.name};
   sendUserConfig();
   $('finishBtn').disabled=false;
   riding=true; lastT=performance.now(); $('startBtn').textContent='Pause'; log('Ride started');
@@ -317,6 +347,8 @@ setInterval(()=>{ // gradient to trainer, once a second, eased so it never jumps
   if(riding&&ride){
     ride.pSum+=curPow; ride.pMax=Math.max(ride.pMax,curPow); ride.n++;
     if(curCad>0){ ride.cSum+=curCad; ride.cN++; }
+    const k=Math.min(route.ele.length-1,Math.round(pos/STEP)), ll=route.ll?route.ll[k]:null;
+    ride.s.push([curPow,curCad,Math.round(speedMs*100),Math.round(ride.dist*10)/10,Math.round(route.ele[k]*10)/10,ll?+ll[0].toFixed(5):null,ll?+ll[1].toFixed(5):null]);
   }
   if(!riding||!route||!writeChar) return;
   const target=Math.max(-10,Math.min(20,gradeAt(pos)*prof().scale/100));
@@ -386,11 +418,17 @@ const fmtDur=s=>{ const h=Math.floor(s/3600), m=Math.floor(s%3600/60), p=n=>Stri
 function renderRides(){
   const u=currentUser(), tb=$('rideRows'); tb.innerHTML='';
   $('histTitle').textContent=u?`Ride history: ${u.name}`:'Ride history';
-  if(!u||!u.rides.length){ tb.innerHTML='<tr><td colspan="8">No rides saved yet.</td></tr>'; return; }
+  if(!u||!u.rides.length){ tb.innerHTML='<tr><td colspan="9">No rides saved yet.</td></tr>'; return; }
   for(const r of u.rides){
     const d=new Date(r.t), tr=document.createElement('tr');
     [d.toLocaleDateString(undefined,{day:'numeric',month:'short',year:'numeric'})+' '+d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}),
      fmtDur(r.sec), r.km.toFixed(2), r.avgP, r.maxP, r.avgC, r.climb, r.scale?r.scale+'%':'-'].forEach(v=>{ const td=document.createElement('td'); td.textContent=v; tr.appendChild(td); });
+    const act=document.createElement('td');
+    [['FIT',()=>exportFit(r)],['Delete',()=>deleteRide(u,r)]].forEach(([label,fn])=>{
+      const b=document.createElement('button'); b.textContent=label; b.onclick=fn;
+      b.style.cssText='min-height:40px;padding:6px 12px;margin-left:6px'; act.appendChild(b);
+    });
+    tr.appendChild(act);
     tb.appendChild(tr);
   }
 }
@@ -403,7 +441,9 @@ function finishRide(){
     const r={t:ride.start.toISOString(),sec:Math.round(ride.sec),km:+(ride.dist/1000).toFixed(2),
       avgP:ride.n?Math.round(ride.pSum/ride.n):0,maxP:ride.pMax,avgC:ride.cN?Math.round(ride.cSum/ride.cN):0,
       climb:route?Math.round(route.climb[i]):0,route:ride.route,scale:prof().scale,kg:prof().weight};
-    u.rides.unshift(r); saveDb(); log(`Saved ride for ${u.name}: ${r.km} km`);
+    u.rides.unshift(r); saveDb();
+    try{ localStorage.setItem('tacx.s.'+r.t,JSON.stringify(ride.s)); }
+    catch(e){ log('Ride saved, but the detailed data did not fit in storage, so no FIT file will be available for it.'); } log(`Saved ride for ${u.name}: ${r.km} km`);
   }
   ride=null; $('finishBtn').disabled=true; renderRides();
 }
@@ -427,9 +467,66 @@ $('saveUserBtn').onclick=addUser;
 $('newName').onkeydown=e=>{ if(e.key==='Enter') addUser(); };
 $('delUserBtn').onclick=()=>{
   const u=currentUser(); if(!u||!confirm(`Delete ${u.name} and all their rides?`)) return;
+  u.rides.forEach(r=>{ try{ localStorage.removeItem('tacx.s.'+r.t); }catch(e){} });
   db.users=db.users.filter(x=>x.id!==u.id); db.last=null; saveDb(); renderUsers();
 };
 $('finishBtn').onclick=finishRide;
+
+// ---------- FIT export (Garmin Connect, Strava) ----------
+const CRC_T=[0x0000,0xCC01,0xD801,0x1400,0xF001,0x3C00,0x2800,0xE401,0xA001,0x6C00,0x7800,0xB401,0x5000,0x9C01,0x8801,0x4400];
+function fitCrc(bytes){
+  let c=0;
+  for(const b of bytes){
+    let t=CRC_T[c&0xF]; c=(c>>4)&0x0FFF; c=c^t^CRC_T[b&0xF];
+    t=CRC_T[c&0xF]; c=(c>>4)&0x0FFF; c=c^t^CRC_T[(b>>4)&0xF];
+  }
+  return c;
+}
+// r: saved ride summary, s: per-second samples [power, cadence, speed cm/s, distance m, altitude m, lat, lon]
+function buildFit(r,s){
+  const o=[], u16=v=>o.push(v&255,(v>>8)&255), u32=v=>o.push(v&255,(v>>>8)&255,(v>>>16)&255,(v>>>24)&255);
+  const def=(loc,num,f)=>{ o.push(0x40|loc,0,0); u16(num); o.push(f.length); f.forEach(x=>o.push(x[0],x[1],x[2])); };
+  const t0=Math.floor(new Date(r.t).getTime()/1000)-631065600, n=s.length, t1=t0+n;
+  const dist=Math.round(s[n-1][3]*100), semi=d=>Math.round(d*2147483648/180);
+  const U8=0x02, E=0x00, U16=0x84, S32=0x85, U32=0x86;
+  def(0,0,[[0,1,E],[1,2,U16],[2,2,U16],[3,4,0x8C],[4,4,U32]]);            // file_id
+  o.push(0,4); u16(255); u16(1); u32(12345); u32(t0);
+  def(1,21,[[253,4,U32],[0,1,E],[1,1,E]]);                                // event
+  o.push(1); u32(t0); o.push(0,0);                                        // timer start
+  def(2,20,[[253,4,U32],[0,4,S32],[1,4,S32],[2,2,U16],[4,1,U8],[5,4,U32],[6,2,U16],[7,2,U16]]); // record
+  s.forEach((p,i)=>{
+    o.push(2); u32(t0+i);
+    u32(p[5]===null?0x7FFFFFFF:semi(p[5])); u32(p[6]===null?0x7FFFFFFF:semi(p[6]));
+    u16(Math.max(0,Math.min(65534,Math.round((p[4]+500)*5))));
+    o.push(Math.min(254,p[1])); u32(Math.round(p[3]*100)); u16(Math.min(65534,p[2]*10)); u16(Math.min(65534,p[0]));
+  });
+  o.push(1); u32(t1); o.push(0,4);                                        // timer stop
+  def(3,19,[[253,4,U32],[2,4,U32],[7,4,U32],[8,4,U32],[9,4,U32],[0,1,E],[1,1,E]]); // lap
+  o.push(3); u32(t1); u32(t0); u32(n*1000); u32(n*1000); u32(dist); o.push(9,1);
+  def(4,18,[[253,4,U32],[2,4,U32],[7,4,U32],[8,4,U32],[9,4,U32],[14,2,U16],[20,2,U16],[21,2,U16],[18,1,U8],[22,2,U16],[5,1,E],[6,1,E],[25,2,U16],[26,2,U16],[0,1,E],[1,1,E]]); // session
+  o.push(4); u32(t1); u32(t0); u32(n*1000); u32(n*1000); u32(dist);
+  u16(Math.round(dist*10/n)); u16(r.avgP); u16(r.maxP); o.push(Math.min(254,r.avgC)); u16(r.climb);
+  o.push(2,58); u16(0); u16(1); o.push(8,1);                              // cycling, virtual activity
+  def(5,34,[[253,4,U32],[0,4,U32],[1,2,U16],[2,1,E],[3,1,E],[4,1,E]]);   // activity
+  o.push(5); u32(t1); u32(n*1000); u16(1); o.push(0,26,1);
+  const h=[14,0x20,0x54,0x08]; const size=o.length;
+  h.push(size&255,(size>>8)&255,(size>>16)&255,(size>>>24)&255,0x2E,0x46,0x49,0x54);
+  const hc=fitCrc(h); h.push(hc&255,hc>>8);
+  const all=h.concat(o), fc=fitCrc(all); all.push(fc&255,fc>>8);
+  return new Uint8Array(all);
+}
+function exportFit(r){
+  let s=null; try{ s=JSON.parse(localStorage.getItem('tacx.s.'+r.t)); }catch(e){}
+  if(!s||s.length<2){ alert('No detailed data was stored for this ride, so a FIT file cannot be made.'); return; }
+  const d=new Date(r.t), stamp=d.toLocaleDateString('en-CA')+'_'+d.toLocaleTimeString('en-GB').replace(/:/g,'-');
+  download(`ride_${stamp}.fit`,buildFit(r,s),'application/octet-stream');
+}
+function deleteRide(u,r){
+  if(!confirm('Delete this ride from the history?')) return;
+  u.rides=u.rides.filter(x=>x!==r);
+  try{ localStorage.removeItem('tacx.s.'+r.t); }catch(e){}
+  saveDb(); renderRides();
+}
 
 // Per-rider settings: gradient scale and weights
 function prof(){
@@ -510,6 +607,11 @@ $('gpxFile').onchange=async e=>{
   const f=e.target.files[0]; if(!f) return;
   try{
     const r=parseGPX(await f.text(),f.name.replace(/\.gpx$/i,''));
+    if(r.needsElevation){
+      log('No elevation in this file, so it is being looked up online (about 90 m resolution).');
+      r.pts=await addElevation(r.pts,(a,b)=>setStatus(`Looking up elevation ${a} of ${b} points...`));
+      restoreStatus(); log('Elevation added');
+    }
     buildRoute(r.name,r.pts); log(`Loaded ${r.name}`);
   }catch(err){ setStatus(err.message,'err'); log(`GPX error: ${err.message}`); }
   e.target.value='';

@@ -247,7 +247,9 @@ function buildRoute(name,pts){
     grade.push(b>a?Math.max(-10,Math.min(20,(ele[b]-ele[a])/((b-a)*STEP)*100)):0);
     if(i>0) climb.push(climb[i-1]+Math.max(0,ele[i]-ele[i-1]));
   }
-  route={name,ele,grade,climb,total,ll:ll.length?ll:null,min:Math.min(...ele),max:Math.max(...ele)};
+  let mn=Infinity, mx=-Infinity;
+  for(const e of ele){ if(e<mn) mn=e; if(e>mx) mx=e; }
+  route={name,ele,grade,climb,total,ll:ll.length?ll:null,min:mn,max:mx};
   pos=0; stopRide(); lastSent=null; ride=null; $('finishBtn').disabled=true;
   $('routeName').textContent=`${name} (${(total/1000).toFixed(1)} km)`;
   $('climbTotal').textContent=Math.round(climb[n-1]);
@@ -566,7 +568,7 @@ $('restoreFile').onchange=async e=>{
 renderUsers();
 
 // ---------- Map (OpenTopoMap and OpenStreetMap tiles via Leaflet) ----------
-let map=null, baseLine=null, doneLine=null, dot=null, lastMapI=-1, zoomed=false;
+let map=null, baseLine=null, doneLine=null, dot=null, lastMapI=-1, zoomed=false, mapStep=1, mapPts=[];
 function mapMessage(text){
   $('map').hidden=true; $('mapBar').hidden=true;
   $('mapNote').hidden=!text; $('mapNote').textContent=text||'';
@@ -582,7 +584,8 @@ function mapSetRoute(){
     topo.addTo(map); L.control.layers({'Topographic':topo,'Street map':street}).addTo(map);
   }
   if(baseLine){ map.removeLayer(baseLine); map.removeLayer(doneLine); map.removeLayer(dot); }
-  baseLine=L.polyline(route.ll,{color:'#2b6cb0',weight:5,opacity:.9}).addTo(map);
+  mapStep=Math.max(1,Math.ceil(route.ll.length/4000)); mapPts=route.ll.filter((_,k)=>k%mapStep===0);
+  baseLine=L.polyline(mapPts,{color:'#2b6cb0',weight:5,opacity:.9}).addTo(map);
   doneLine=L.polyline([],{color:'#f2b134',weight:6}).addTo(map);
   dot=L.circleMarker(route.ll[0],{radius:8,color:'#14181c',weight:2,fillColor:'#f2b134',fillOpacity:1}).addTo(map);
   lastMapI=-1; zoomed=false; map.invalidateSize(); map.fitBounds(baseLine.getBounds(),{padding:[20,20]});
@@ -591,7 +594,7 @@ function mapUpdate(){
   if(!map||!route||!route.ll||!dot) return;
   const i=Math.min(route.ll.length-1,Math.round(pos/STEP));
   if(i===lastMapI) return;
-  lastMapI=i; dot.setLatLng(route.ll[i]); doneLine.setLatLngs(route.ll.slice(0,i+1));
+  lastMapI=i; dot.setLatLng(route.ll[i]); doneLine.setLatLngs(mapPts.slice(0,Math.floor(i/mapStep)+1));
   if(riding&&$('follow').checked){
     if(!zoomed){ map.setView(route.ll[i],15,{animate:false}); zoomed=true; }
     else map.setView(route.ll[i],map.getZoom(),{animate:false});

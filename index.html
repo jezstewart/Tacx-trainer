@@ -6,8 +6,8 @@
 <title>Tacx route rider</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.css">
-<script src="https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@5.6.0/dist/maplibre-gl.css">
+<script src="https://cdn.jsdelivr.net/npm/maplibre-gl@5.6.0/dist/maplibre-gl.js"></script>
 <style>
   :root { --bg:#14181c; --panel:#1d2329; --line:#2e3740; --text:#e8ecef; --dim:#8b98a3; --accent:#f2b134; --bad:#ef6b5f; --good:#5fcf8e; }
   * { box-sizing: border-box; }
@@ -212,7 +212,7 @@
   <div id="bigMapWrap">
     <div id="bigNoMap" hidden>No map for this route</div>
     <div id="map3d"></div>
-    <button id="big3dStyle">Street</button>
+    <button id="big3dStyle">Topo</button>
     <button id="big3d">3D</button>
     <div class="bnums n1">
       <div class="bt"><div class="bl">POWER (W)</div><div class="bv" id="bPower">--</div></div>
@@ -797,8 +797,8 @@ $('plGpx').onclick=async()=>{
 };
 
 // ---------- 3D terrain view (MapLibre GL) ----------
-const M3={pitch:65,zoom:14.3,exaggeration:1.5,riderLow:0.3,lookAhead:25,turnEase:0.25};
-let m3=null, m3On=false, m3Loaded=false, m3Last=-1, m3Bear=0, m3Topo=true, m3Coords=[], m3Step=1;
+const M3={pitch:72,zoom:15.3,exaggeration:1.4,riderLow:0.35,lookAhead:25,turnEase:0.25};
+let m3=null, m3On=false, m3Loaded=false, m3Last=-1, m3Bear=0, m3Topo=false, m3Coords=[], m3Step=1, m3VecIds=[];
 const bearingTo=(a,b)=>{
   const r=Math.PI/180, dl=(b[1]-a[1])*r;
   const y=Math.sin(dl)*Math.cos(b[0]*r), x=Math.cos(a[0]*r)*Math.sin(b[0]*r)-Math.sin(a[0]*r)*Math.cos(b[0]*r)*Math.cos(dl);
@@ -806,6 +806,33 @@ const bearingTo=(a,b)=>{
 };
 const m3Line=c=>c.length>1?{type:'Feature',properties:{},geometry:{type:'LineString',coordinates:c}}:{type:'FeatureCollection',features:[]};
 const m3Pt=ll=>({type:'Feature',properties:{},geometry:{type:'Point',coordinates:[ll[1],ll[0]]}});
+// Terrain, relief shading, a topographic alternative, vineyards and orchards, and a sky, added on top of the OpenFreeMap style
+function m3Scenery(){
+  const st=m3.getStyle(), layers=st.layers||[];
+  m3VecIds=layers.map(l=>l.id);
+  const vsrc=Object.keys(st.sources||{}).find(k=>st.sources[k].type==='vector');
+  const firstLine=(layers.find(l=>l.type==='line')||{}).id;
+  m3.addSource('dem',{type:'raster-dem',tiles:['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'],encoding:'terrarium',tileSize:256,maxzoom:15,attribution:'Terrain: Tilezen / AWS Open Data'});
+  m3.setTerrain({source:'dem',exaggeration:M3.exaggeration});
+  m3.addSource('topo',{type:'raster',tiles:['a','b','c'].map(x=>`https://${x}.tile.opentopomap.org/{z}/{x}/{y}.png`),tileSize:256,maxzoom:17,attribution:'Map data &copy; OpenStreetMap contributors, SRTM | Style &copy; OpenTopoMap'});
+  m3.addLayer({id:'topo',type:'raster',source:'topo',layout:{visibility:'none'}},layers[0]&&layers[0].id);
+  m3.addLayer({id:'hillshade',type:'hillshade',source:'dem',paint:{'hillshade-exaggeration':0.4,'hillshade-shadow-color':'#33402f','hillshade-accent-color':'#33402f'}},firstLine);
+  if(vsrc){
+    const c=document.createElement('canvas'); c.width=c.height=16;
+    const g=c.getContext('2d'); g.fillStyle='#c9d27c'; g.fillRect(0,0,16,16); g.fillStyle='#86973f'; g.fillRect(0,0,16,3); g.fillStyle='#a9b958'; g.fillRect(0,3,16,1);
+    m3.addImage('vine',g.getImageData(0,0,16,16),{pixelRatio:1});
+    m3.addLayer({id:'vineyard',type:'fill',source:vsrc,'source-layer':'landcover',
+      filter:['in',['get','subclass'],['literal',['vineyard','orchard']]],
+      paint:{'fill-pattern':'vine'}},firstLine);
+  }
+  try{ m3.setSky({'sky-color':'#7fb8ea','sky-horizon-blend':0.6,'horizon-color':'#e3edf5','horizon-fog-blend':0.7,'fog-color':'#e3edf5','fog-ground-blend':0.4}); }catch(e){}
+}
+function m3Mode(topo){
+  m3Topo=topo;
+  m3VecIds.concat(['hillshade','vineyard']).forEach(id=>{ if(m3.getLayer(id)) m3.setLayoutProperty(id,'visibility',topo?'none':'visible'); });
+  m3.setLayoutProperty('topo','visibility',topo?'visible':'none');
+  $('big3dStyle').textContent=topo?'Detailed':'Topo';
+}
 function m3Init(){
   if(m3) return true;
   if(typeof maplibregl==='undefined'){ alert('The 3D map library could not load. Check the internet connection and reload.'); return false; }
@@ -815,26 +842,20 @@ function m3Init(){
     return false;
   }
   try{ m3=new maplibregl.Map({
-    container:'map3d', center:[0,0], zoom:2, maxPitch:70, attributionControl:{compact:true},
-    style:{version:8,
-      sources:{
-        topo:{type:'raster',tiles:['a','b','c'].map(x=>`https://${x}.tile.opentopomap.org/{z}/{x}/{y}.png`),tileSize:256,maxzoom:17,attribution:'Map data &copy; OpenStreetMap contributors, SRTM | Style &copy; OpenTopoMap'},
-        osm:{type:'raster',tiles:['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],tileSize:256,maxzoom:19,attribution:'&copy; OpenStreetMap contributors'},
-        dem:{type:'raster-dem',tiles:['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'],encoding:'terrarium',tileSize:256,maxzoom:15,attribution:'Terrain: Tilezen / AWS Open Data'}
-      },
-      layers:[{id:'topo',type:'raster',source:'topo'},{id:'osm',type:'raster',source:'osm',layout:{visibility:'none'}}],
-      terrain:{source:'dem',exaggeration:M3.exaggeration}
-    }
+    container:'map3d', center:[0,0], zoom:2, maxPitch:80, attributionControl:{compact:true},
+    style:'https://tiles.openfreemap.org/styles/liberty'
   }); }catch(e){ m3=null; alert('The 3D view could not start: '+e.message); return false; }
   m3.on('load',()=>{
-    m3Loaded=true;
+    try{ m3Scenery(); }catch(e){ log('3D scenery: '+e.message); }
     m3.addSource('route',{type:'geojson',data:m3Line([])});
     m3.addSource('done',{type:'geojson',data:m3Line([])});
     m3.addSource('me',{type:'geojson',data:{type:'FeatureCollection',features:[]}});
-    m3.addLayer({id:'route',type:'line',source:'route',layout:{'line-cap':'round','line-join':'round'},paint:{'line-color':'#2b6cb0','line-width':7}});
-    m3.addLayer({id:'done',type:'line',source:'done',layout:{'line-cap':'round','line-join':'round'},paint:{'line-color':'#f2b134','line-width':8}});
+    const rl={'line-cap':'round','line-join':'round'};
+    m3.addLayer({id:'route-casing',type:'line',source:'route',layout:rl,paint:{'line-color':'#ffffff','line-width':12,'line-opacity':.9}});
+    m3.addLayer({id:'route',type:'line',source:'route',layout:rl,paint:{'line-color':'#1d6fe0','line-width':7}});
+    m3.addLayer({id:'done',type:'line',source:'done',layout:rl,paint:{'line-color':'#f2b134','line-width':8}});
     m3.addLayer({id:'me',type:'circle',source:'me',paint:{'circle-radius':10,'circle-color':'#f2b134','circle-stroke-color':'#14181c','circle-stroke-width':3}});
-    m3Route(); m3Last=-1; m3Update(true);
+    m3Loaded=true; m3Route(); m3Last=-1; m3Update(true);
   });
   m3.on('error',e=>log('3D map: '+((e&&e.error&&e.error.message)||'tile or style error')));
   return true;
@@ -872,13 +893,7 @@ function set3d(on){
   else if(map) setTimeout(()=>map.invalidateSize(),50);
 }
 $('big3d').onclick=()=>set3d(!m3On);
-$('big3dStyle').onclick=()=>{
-  if(!m3||!m3Loaded) return;
-  m3Topo=!m3Topo;
-  m3.setLayoutProperty('topo','visibility',m3Topo?'visible':'none');
-  m3.setLayoutProperty('osm','visibility',m3Topo?'none':'visible');
-  $('big3dStyle').textContent=m3Topo?'Street':'Topo';
-};
+$('big3dStyle').onclick=()=>{ if(m3&&m3Loaded) m3Mode(!m3Topo); };
 
 // ---------- Full-screen ride screen ----------
 let bigOpen=false, wake=null, mapAnchor=null;
